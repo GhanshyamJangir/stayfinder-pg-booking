@@ -9,7 +9,7 @@ const geoDistanceKm=(a,b,c,d)=>{const R=6371,toRad=x=>x*Math.PI/180;const dLat=t
 
 export default function DashboardShell({user,role}){
  const router=useRouter(); const owner=role==='owner';
- const [notice,setNotice]=useState(''); const [loading,setLoading]=useState(false); const [processingText,setProcessingText]=useState(''); const [contactInfo,setContactInfo]=useState(null); const liveChannelRef=useRef(null);
+ const [notice,setNotice]=useState(''); const [loading,setLoading]=useState(false); const [processingText,setProcessingText]=useState(''); const [contactInfo,setContactInfo]=useState(null); const liveChannelRef=useRef(null); const liveSyncBusy=useRef(false); const lastLiveSyncAt=useRef(0);
  // customer
  const [customerView,setCustomerView]=useState('explore'); const [pgs,setPgs]=useState([]); const [bookings,setBookings]=useState([]); const [payments,setPayments]=useState([]); const [customerRefunds,setCustomerRefunds]=useState([]); const [selectedPg,setSelectedPg]=useState(null); const [saved,setSaved]=useState([]);
  const [city,setCity]=useState('Jaipur'),[searchArea,setSearchArea]=useState(''),[roomType,setRoomType]=useState('Any'),[gender,setGender]=useState('Any'),[maxPrice,setMaxPrice]=useState('20000'),[activeCategory,setActiveCategory]=useState('All PGs'); const [customerLocation,setCustomerLocation]=useState(null); const [locationStatus,setLocationStatus]=useState('');
@@ -93,7 +93,10 @@ export default function DashboardShell({user,role}){
     const a=await jsonFetch('/api/customer/pgs');
     setPgs(a.pgs||[]);
   }catch(e){
-    setPgs([]);setNotice(e.message);if(!silent)setLoading(false);return;
+    // Never wipe already loaded marketplace data because of a temporary Sheets/API quota error.
+    if(!silent)setNotice(e.message);
+    if(!silent)setLoading(false);
+    return;
   }
   const results=await Promise.allSettled([
     jsonFetch('/api/customer/bookings'),
@@ -168,15 +171,28 @@ export default function DashboardShell({user,role}){
  useEffect(()=>{if(!owner)return;setNotice('');loadOwnerViewData(ownerView);},[owner,ownerView]);
  useEffect(()=>{
   if(typeof window==='undefined')return;
-  const handleSync=()=>{if(document.visibilityState==='hidden')return;owner?refreshOwner(ownerView,true):loadCustomer(true);};
+  // Sheets-safe live sync: mutations refresh their own screen immediately.
+  // BroadcastChannel/storage updates other open tabs instantly, without continuous polling.
+  // Focus/visibility only refresh when data is stale, preventing Google Sheets 429 quota bursts.
+  const handleSync=async(force=false)=>{
+   if(document.visibilityState==='hidden'||liveSyncBusy.current)return;
+   const now=Date.now();
+   if(!force&&now-lastLiveSyncAt.current<3000)return;
+   liveSyncBusy.current=true;
+   lastLiveSyncAt.current=now;
+   try{owner?await refreshOwner(ownerView,true):await loadCustomer(true);}catch{}
+   finally{liveSyncBusy.current=false;}
+  };
   let bc=null;
-  try{bc=new BroadcastChannel('stayfinder-live');liveChannelRef.current=bc;bc.onmessage=handleSync;}catch{}
-  const onStorage=e=>{if(e.key==='stayfinder_live_update')handleSync();};
-  const onFocus=()=>handleSync();
-  const onVisible=()=>{if(document.visibilityState==='visible')handleSync();};
-  window.addEventListener('storage',onStorage);window.addEventListener('focus',onFocus);document.addEventListener('visibilitychange',onVisible);
-  const timer=setInterval(handleSync,20000);
-  return()=>{clearInterval(timer);window.removeEventListener('storage',onStorage);window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onVisible);try{bc?.close();}catch{}if(liveChannelRef.current===bc)liveChannelRef.current=null;};
+  try{bc=new BroadcastChannel('stayfinder-live');liveChannelRef.current=bc;bc.onmessage=()=>handleSync(true);}catch{}
+  const onStorage=e=>{if(e.key==='stayfinder_live_update')handleSync(true);};
+  const refreshIfStale=()=>{if(Date.now()-lastLiveSyncAt.current>=120000)handleSync(false);};
+  const onFocus=()=>refreshIfStale();
+  const onVisible=()=>{if(document.visibilityState==='visible')refreshIfStale();};
+  window.addEventListener('storage',onStorage);
+  window.addEventListener('focus',onFocus);
+  document.addEventListener('visibilitychange',onVisible);
+  return()=>{window.removeEventListener('storage',onStorage);window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onVisible);try{bc?.close();}catch{}if(liveChannelRef.current===bc)liveChannelRef.current=null;};
  },[owner,ownerView]);
 
  const filteredPgs=useMemo(()=>{const list=pgs.filter(pg=>{const text=`${pg.name} ${pg.address} ${pg.city}`.toLowerCase();const minRent=Math.min(...(pg.rooms||[]).map(r=>r.rent).filter(Boolean),999999);return(!searchArea.trim()||text.includes(searchArea.trim().toLowerCase()))&&(!city||String(pg.city).toLowerCase()===city.toLowerCase())&&(gender==='Any'||pg.gender===gender)&&(roomType==='Any'||(pg.rooms||[]).some(r=>String(r.type).toLowerCase().includes(roomType.toLowerCase())))&&(!maxPrice||minRent<=Number(maxPrice))&&(activeCategory==='All PGs'||(activeCategory==='Budget'&&minRent<=7000)||(activeCategory==='Girls'&&pg.gender==='Girls')||(activeCategory==='Boys'&&pg.gender==='Boys')||(activeCategory==='Co-Living'&&pg.gender==='Unisex')||(activeCategory==='Top Rated'));}); if(!customerLocation)return list;return [...list].sort((x,y)=>{const xd=x.latitude&&x.longitude?geoDistanceKm(customerLocation.lat,customerLocation.lng,Number(x.latitude),Number(x.longitude)):999999;const yd=y.latitude&&y.longitude?geoDistanceKm(customerLocation.lat,customerLocation.lng,Number(y.latitude),Number(y.longitude)):999999;return xd-yd;});},[pgs,searchArea,city,gender,roomType,maxPrice,activeCategory,customerLocation]);
