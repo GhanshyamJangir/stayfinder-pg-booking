@@ -1,0 +1,35 @@
+STAYFINDER PWA / INSTALL APP
+============================
+
+Changed files in this ZIP:
+- app/page.js
+- public/manifest.webmanifest
+- public/sw.js
+- public/icons/stayfinder-192.png
+- public/icons/stayfinder-512.png
+- public/icons/stayfinder-maskable-512.png
+
+What it does:
+- Shows an "Install App" button on StayFinder login screen.
+- Android/Chrome: opens the native browser install prompt when available.
+- iPhone/Safari: shows Add to Home Screen instructions.
+- Hides the button automatically after the app is installed.
+- Registers a safe service worker. API calls are never cached.
+- Installed app opens in standalone mode (no normal browser address bar).
+- Works best on the HTTPS Vercel production URL.
+
+After replacing the files:
+  git add app/page.js public/manifest.webmanifest public/sw.js public/icons
+  git commit -m "Add StayFinder PWA install"
+  git push
+
+Vercel will deploy automatically from main.
+
+TEST:
+1. Open https://stayfinder-pg-booking.vercel.app on Android Chrome.
+2. Refresh once after deployment.
+3. Tap "Install App" at the bottom-right on mobile.
+4. Confirm Install.
+5. StayFinder icon appears in the app drawer/home screen.
+
+If Chrome has already dismissed the prompt before, the button will show instructions; browser menu > Install app also works.

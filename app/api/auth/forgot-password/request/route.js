@@ -1,0 +1,3 @@
+import { NextResponse } from 'next/server';
+import { requestPasswordOtp } from '../../../../../lib/password-reset';
+export async function POST(req){try{const b=await req.json();const identifier=String(b?.identifier||'').trim();if(!identifier)return NextResponse.json({ok:false,error:'Enter your registered email or username.'},{status:400});await requestPasswordOtp(identifier);return NextResponse.json({ok:true,message:'If the account is registered, an OTP has been sent to the registered email.'});}catch(e){console.error('RESET_OTP_REQUEST_ERROR',e);return NextResponse.json({ok:false,error:e.message||'Unable to send OTP.'},{status:400});}}
