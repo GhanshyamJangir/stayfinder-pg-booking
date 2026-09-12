@@ -7,11 +7,33 @@ const MORE=['users','properties','trust','reviews','activity'];
 
 export default function AdminControlCenter({user}){
  const [data,setData]=useState(null),[control,setControl]=useState(null),[view,setView]=useState('overview'),[error,setError]=useState(''),[loading,setLoading]=useState(true),[filter,setFilter]=useState('All'),[note,setNote]=useState({}),[ticketPage,setTicketPage]=useState(1),[moreOpen,setMoreOpen]=useState(false);
- async function load(){setLoading(true);setError('');try{const [r,c]=await Promise.all([fetch('/api/admin/summary',{cache:'no-store'}),fetch('/api/admin/control',{cache:'no-store'})]);const d=await r.json(),cd=await c.json();if(!r.ok||!d.ok)throw new Error(d.error||'Admin data failed.');if(!c.ok||!cd.ok)throw new Error(cd.error||'Admin controls failed.');setData(d);setControl(cd)}catch(e){setError(e.message)}finally{setLoading(false)}}
- async function adminAction(body,method='PATCH'){setError('');try{const r=await fetch('/api/admin/control',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Admin action failed.');if(d.tempPassword)window.alert(`Temporary password: ${d.tempPassword}\nA copy was emailed to the user when email is available.`);await load();return d}catch(e){setError(e.message);throw e}}
+ async function apiJson(response,label){
+  const type=(response.headers.get('content-type')||'').toLowerCase();
+  const text=await response.text();
+  if(!type.includes('application/json')){
+   throw new Error(`${label} is unavailable (HTTP ${response.status}). Please redeploy the latest StayFinder admin API files.`);
+  }
+  let payload;
+  try{payload=text?JSON.parse(text):{}}catch{throw new Error(`${label} returned an invalid response.`)}
+  if(!response.ok||payload?.ok===false)throw new Error(payload?.error||`${label} failed (HTTP ${response.status}).`);
+  return payload;
+ }
+ async function load(){
+  setLoading(true);setError('');
+  try{
+   // Keep these sequential so the admin screen does not create a burst of Google Sheets reads.
+   const r=await fetch('/api/admin/summary',{cache:'no-store'});
+   const d=await apiJson(r,'Admin summary');
+   setData(d);
+   const c=await fetch('/api/admin/control',{cache:'no-store'});
+   const cd=await apiJson(c,'Admin controls');
+   setControl(cd);
+  }catch(e){setError(e?.message||'Admin data could not be loaded.')}finally{setLoading(false)}
+ }
+ async function adminAction(body,method='PATCH'){setError('');try{const r=await fetch('/api/admin/control',{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const d=await apiJson(r,'Admin action');if(d.tempPassword)window.alert(`Temporary password: ${d.tempPassword}\nA copy was emailed to the user when email is available.`);await load();return d}catch(e){setError(e?.message||'Admin action failed.');throw e}}
  useEffect(()=>{load()},[]);
  async function logout(){try{await fetch('/api/auth/logout',{method:'POST'})}finally{location.replace('/')}}
- async function updateTicket(t,status){try{const r=await fetch('/api/plus/support',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:t.id,status,adminNote:note[t.id]||t.admin_note||''})});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error);await load()}catch(e){setError(e.message)}}
+ async function updateTicket(t,status){try{const r=await fetch('/api/plus/support',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:t.id,status,adminNote:note[t.id]||t.admin_note||''})});await apiJson(r,'Support update');await load()}catch(e){setError(e?.message||'Support update failed.')}}
  const tickets=useMemo(()=>data?.tickets?.filter(t=>filter==='All'||t.status===filter)||[],[data,filter]);
  const ticketPageSize=3,ticketPages=Math.max(1,Math.ceil(tickets.length/ticketPageSize));
  const visibleTickets=tickets.slice((ticketPage-1)*ticketPageSize,ticketPage*ticketPageSize);
