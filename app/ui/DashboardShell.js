@@ -9,7 +9,7 @@ const geoDistanceKm=(a,b,c,d)=>{const R=6371,toRad=x=>x*Math.PI/180;const dLat=t
 
 export default function DashboardShell({user,role}){
  const router=useRouter(); const owner=role==='owner';
- const [notice,setNotice]=useState(''); const [loading,setLoading]=useState(false); const [processingText,setProcessingText]=useState(''); const [contactInfo,setContactInfo]=useState(null); const liveChannelRef=useRef(null); const liveSyncBusy=useRef(false); const lastLiveSyncAt=useRef(0);
+ const [notice,setNotice]=useState(''); const [loading,setLoading]=useState(false); const [processingText,setProcessingText]=useState(''); const [contactInfo,setContactInfo]=useState(null); const liveChannelRef=useRef(null); const liveSyncBusy=useRef(false); const liveSyncTimer=useRef(null); const pendingLiveSync=useRef(false); const ownerDraftDirty=useRef(false);
  // customer
  const [customerView,setCustomerView]=useState('explore'); const [pgs,setPgs]=useState([]); const [bookings,setBookings]=useState([]); const [payments,setPayments]=useState([]); const [customerRefunds,setCustomerRefunds]=useState([]); const [selectedPg,setSelectedPg]=useState(null); const [saved,setSaved]=useState([]);
  const [city,setCity]=useState('Jaipur'),[searchArea,setSearchArea]=useState(''),[roomType,setRoomType]=useState('Any'),[gender,setGender]=useState('Any'),[maxPrice,setMaxPrice]=useState('20000'),[activeCategory,setActiveCategory]=useState('All PGs'); const [customerLocation,setCustomerLocation]=useState(null); const [locationStatus,setLocationStatus]=useState('');
@@ -81,7 +81,16 @@ export default function DashboardShell({user,role}){
   }
   if(!r.ok||!d.ok)throw new Error(d.error||`${url} request failed (HTTP ${r.status})`);
   const method=String(opts?.method||'GET').toUpperCase();
-  if(method!=='GET'&&method!=='HEAD')notifyLiveUpdate(url.includes('/owner/')?'owner':url.includes('/customer/')?'customer':'all');
+  if(method!=='GET'&&method!=='HEAD'){
+   let scope='all';
+   if(url.includes('/owner/pgs'))scope='owner-pgs';
+   else if(url.includes('/owner/rooms'))scope='owner-rooms';
+   else if(url.includes('/owner/bookings'))scope='owner-bookings';
+   else if(url.includes('/owner/payments')||url.includes('/owner/payment-settings'))scope='owner-payments';
+   else if(url.includes('/owner/refunds'))scope='owner-refunds';
+   else if(url.includes('/customer/'))scope='customer';
+   notifyLiveUpdate(scope);
+  }
   return d;
  }
 
@@ -171,29 +180,68 @@ export default function DashboardShell({user,role}){
  useEffect(()=>{if(!owner)return;setNotice('');loadOwnerViewData(ownerView);},[owner,ownerView]);
  useEffect(()=>{
   if(typeof window==='undefined')return;
-  // Sheets-safe live sync: mutations refresh their own screen immediately.
-  // BroadcastChannel/storage updates other open tabs instantly, without continuous polling.
-  // Focus/visibility only refresh when data is stale, preventing Google Sheets 429 quota bursts.
-  const handleSync=async(force=false)=>{
+  // Event-driven sync only: no interval, no focus refresh, no visibility refresh.
+  // Data reloads only when a real mutation is broadcast from another open tab/session.
+  // Multiple mutation events are coalesced so Google Sheets receives one read burst.
+  const runSync=async(scope='all')=>{
    if(document.visibilityState==='hidden'||liveSyncBusy.current)return;
-   const now=Date.now();
-   if(!force&&now-lastLiveSyncAt.current<3000)return;
+   // Never touch the Add PG screen while the Host has an unsaved draft.
+   if(owner&&ownerView==='add'&&ownerDraftDirty.current){pendingLiveSync.current=true;return;}
    liveSyncBusy.current=true;
-   lastLiveSyncAt.current=now;
-   try{owner?await refreshOwner(ownerView,true):await loadCustomer(true);}catch{}
-   finally{liveSyncBusy.current=false;}
+   try{
+    if(owner){
+     if(scope==='owner-pgs'||scope==='owner-rooms'||scope==='all'){
+      await refreshOwner(ownerView,true);
+     }else if(scope==='owner-bookings'){
+      ownerViewLoaded.current.delete('bookings');
+      ownerViewLoaded.current.delete('overview');
+      ownerViewLoaded.current.delete('properties');
+      if(['bookings','overview','properties'].includes(ownerView))await loadOwnerViewData(ownerView,true,true);
+     }else if(scope==='owner-payments'||scope==='owner-refunds'){
+      ownerViewLoaded.current.delete('payments');
+      ownerViewLoaded.current.delete('bookings');
+      if(['payments','bookings'].includes(ownerView))await loadOwnerViewData(ownerView,true,true);
+     }
+    }else{
+     await loadCustomer(true);
+    }
+   }catch{}finally{liveSyncBusy.current=false;}
+  };
+  const scheduleSync=(scope='all')=>{
+   if(liveSyncTimer.current)clearTimeout(liveSyncTimer.current);
+   liveSyncTimer.current=setTimeout(()=>runSync(scope),900);
   };
   let bc=null;
-  try{bc=new BroadcastChannel('stayfinder-live');liveChannelRef.current=bc;bc.onmessage=()=>handleSync(true);}catch{}
-  const onStorage=e=>{if(e.key==='stayfinder_live_update')handleSync(true);};
-  const refreshIfStale=()=>{if(Date.now()-lastLiveSyncAt.current>=120000)handleSync(false);};
-  const onFocus=()=>refreshIfStale();
-  const onVisible=()=>{if(document.visibilityState==='visible')refreshIfStale();};
+  try{bc=new BroadcastChannel('stayfinder-live');liveChannelRef.current=bc;bc.onmessage=e=>scheduleSync(e?.data?.scope||'all');}catch{}
+  const onStorage=e=>{
+   if(e.key!=='stayfinder_live_update'||!e.newValue)return;
+   try{const data=JSON.parse(e.newValue);scheduleSync(data?.scope||'all');}catch{scheduleSync('all');}
+  };
   window.addEventListener('storage',onStorage);
-  window.addEventListener('focus',onFocus);
-  document.addEventListener('visibilitychange',onVisible);
-  return()=>{window.removeEventListener('storage',onStorage);window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onVisible);try{bc?.close();}catch{}if(liveChannelRef.current===bc)liveChannelRef.current=null;};
+  return()=>{
+   window.removeEventListener('storage',onStorage);
+   if(liveSyncTimer.current){clearTimeout(liveSyncTimer.current);liveSyncTimer.current=null;}
+   try{bc?.close();}catch{}
+   if(liveChannelRef.current===bc)liveChannelRef.current=null;
+  };
  },[owner,ownerView]);
+
+ // Protect unsaved Host Add-PG data from any background/external sync.
+ useEffect(()=>{
+  if(!owner)return;
+  const hasDraft=Boolean(
+   ownerPlaceQuery.trim()||pgForm.name.trim()||pgForm.address.trim()||pgForm.description.trim()||
+   pgForm.latitude||pgForm.longitude||photos.length
+  );
+  ownerDraftDirty.current=ownerView==='add'&&hasDraft;
+  if(!ownerDraftDirty.current&&pendingLiveSync.current){
+   pendingLiveSync.current=false;
+   ownerBaseLoaded.current=false;
+   ownerViewLoaded.current.delete(ownerView);
+   // Run once after leaving/clearing the draft, not while the user is typing/uploading.
+   setTimeout(()=>{if(!liveSyncBusy.current)refreshOwner(ownerView,true).catch(()=>{});},0);
+  }
+ },[owner,ownerView,ownerPlaceQuery,pgForm.name,pgForm.address,pgForm.description,pgForm.latitude,pgForm.longitude,photos.length]);
 
  const filteredPgs=useMemo(()=>{const list=pgs.filter(pg=>{const text=`${pg.name} ${pg.address} ${pg.city}`.toLowerCase();const minRent=Math.min(...(pg.rooms||[]).map(r=>r.rent).filter(Boolean),999999);return(!searchArea.trim()||text.includes(searchArea.trim().toLowerCase()))&&(!city||String(pg.city).toLowerCase()===city.toLowerCase())&&(gender==='Any'||pg.gender===gender)&&(roomType==='Any'||(pg.rooms||[]).some(r=>String(r.type).toLowerCase().includes(roomType.toLowerCase())))&&(!maxPrice||minRent<=Number(maxPrice))&&(activeCategory==='All PGs'||(activeCategory==='Budget'&&minRent<=7000)||(activeCategory==='Girls'&&pg.gender==='Girls')||(activeCategory==='Boys'&&pg.gender==='Boys')||(activeCategory==='Co-Living'&&pg.gender==='Unisex')||(activeCategory==='Top Rated'));}); if(!customerLocation)return list;return [...list].sort((x,y)=>{const xd=x.latitude&&x.longitude?geoDistanceKm(customerLocation.lat,customerLocation.lng,Number(x.latitude),Number(x.longitude)):999999;const yd=y.latitude&&y.longitude?geoDistanceKm(customerLocation.lat,customerLocation.lng,Number(y.latitude),Number(y.longitude)):999999;return xd-yd;});},[pgs,searchArea,city,gender,roomType,maxPrice,activeCategory,customerLocation]);
  function toggleSaved(id){setSaved(prev=>{const n=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];localStorage.setItem(savedKey,JSON.stringify(n));return n;});}
@@ -210,7 +258,7 @@ export default function DashboardShell({user,role}){
  function removePhoto(i){setPhotos(p=>p.filter((_,x)=>x!==i));}
  function toggleAmenity(a){setPgForm(p=>({...p,amenities:p.amenities.includes(a)?p.amenities.filter(x=>x!==a):[...p.amenities,a]}));}
  async function savePg(e){e.preventDefault();if(photos.length<5||photos.length>8){setNotice('A PG requires 5 to 8 images.');return;}setProcessingText('Saving PG details and photos...');try{setLoading(true);const d=await jsonFetch('/api/owner/pgs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pgForm)});let photosSaved=false;try{const fd=new FormData();photos.forEach(f=>fd.append('photos',f));await jsonFetch(`/api/owner/pgs/${d.pg.id}/photos`,{method:'POST',body:fd});photosSaved=true;}catch(photoError){console.error('PG_PHOTO_UPLOAD_CLIENT_ERROR',photoError);}
- setPgForm({name:'',address:'',city:'Jaipur',description:'',gender:'Boys',amenities:['Wi-Fi','CCTV'],status:'Active',latitude:'',longitude:''});setOwnerPlaceQuery('');setOwnerPlaceSuggestions([]);setPhotos([]);setOwnerView('rooms');await refreshOwner('rooms');setNotice(photosSaved?'PG and photos saved successfully.':'PG saved successfully. Photos could not be uploaded right now.');}catch(e){setNotice(e.message);}finally{setLoading(false);setProcessingText('');}}
+ ownerDraftDirty.current=false;pendingLiveSync.current=false;setPgForm({name:'',address:'',city:'Jaipur',description:'',gender:'Boys',amenities:['Wi-Fi','CCTV'],status:'Active',latitude:'',longitude:''});setOwnerPlaceQuery('');setOwnerPlaceSuggestions([]);setPhotos([]);setOwnerView('rooms');await refreshOwner('rooms');setNotice(photosSaved?'PG and photos saved successfully.':'PG saved successfully. Photos could not be uploaded right now.');}catch(e){setNotice(e.message);}finally{setLoading(false);setProcessingText('');}}
  async function saveRoom(e){e.preventDefault();setProcessingText('Saving room inventory...');try{const out=await jsonFetch('/api/owner/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(roomForm)});setRoomForm(x=>({...x,type:'Single',totalBeds:1,availableBeds:1,rent:'',deposit:''}));setNotice(out?.room?.merged?'Room inventory increased successfully.':'Room type added successfully.');await refreshOwner(ownerView);}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
  async function bookingAction(id,status){setProcessingText(`Updating booking status...`);try{await jsonFetch('/api/owner/bookings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({bookingId:id,status})});setNotice(`Booking status updated successfully.`);await refreshOwner(ownerView);}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
  async function saveOwnerPaymentSettings(e){e.preventDefault();setProcessingText('Saving payment settings...');try{setLoading(true);const f=new FormData();Object.entries(ownerPayForm).forEach(([k,v])=>{if(k==='qr'){if(v)f.append('qr',v);}else f.append(k,v??'')});const d=await jsonFetch('/api/owner/payment-settings',{method:'POST',body:f});setOwnerPaySettings(d.settings);setOwnerPayForm({upiName:'',upiId:'',bankName:'',accountHolder:'',accountNumber:'',ifsc:'',note:'',qr:null});setNotice('Payment details saved successfully.');}catch(e){setNotice(e.message);}finally{setLoading(false);setProcessingText('');}}
