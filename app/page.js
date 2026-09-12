@@ -13,6 +13,75 @@ export default function LoginPage() {
   const [register, setRegister] = useState({ name: '', mobile: '', email: '', username: '', password: '', role: 'customer' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [installPrompt, setInstallPrompt] = useState(null);
+  const [showInstallHelp, setShowInstallHelp] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
+
+  useEffect(() => {
+    const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true;
+    setIsStandalone(Boolean(standalone));
+
+    if (!document.querySelector('link[rel="manifest"]')) {
+      const manifest = document.createElement('link');
+      manifest.rel = 'manifest';
+      manifest.href = '/manifest.webmanifest';
+      document.head.appendChild(manifest);
+    }
+    if (!document.querySelector('meta[name="theme-color"]')) {
+      const theme = document.createElement('meta');
+      theme.name = 'theme-color';
+      theme.content = '#2f6966';
+      document.head.appendChild(theme);
+    }
+    if (!document.querySelector('meta[name="apple-mobile-web-app-capable"]')) {
+      const apple = document.createElement('meta');
+      apple.name = 'apple-mobile-web-app-capable';
+      apple.content = 'yes';
+      document.head.appendChild(apple);
+    }
+    if (!document.querySelector('link[rel="apple-touch-icon"]')) {
+      const appleIcon = document.createElement('link');
+      appleIcon.rel = 'apple-touch-icon';
+      appleIcon.href = '/icons/stayfinder-192.png';
+      document.head.appendChild(appleIcon);
+    }
+
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
+    const onBeforeInstall = (event) => {
+      event.preventDefault();
+      setInstallPrompt(event);
+    };
+    const onInstalled = () => {
+      setInstallPrompt(null);
+      setIsStandalone(true);
+      setShowInstallHelp(false);
+    };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  async function installApp() {
+    if (installPrompt) {
+      try {
+        await installPrompt.prompt();
+        const choice = await installPrompt.userChoice;
+        if (choice?.outcome === 'accepted') {
+          setInstallPrompt(null);
+          setIsStandalone(true);
+        }
+      } catch {}
+      return;
+    }
+    setShowInstallHelp(true);
+  }
 
   useEffect(() => {
     fetch('/api/auth/me', { credentials: 'include', cache: 'no-store' }).then(async r => {
@@ -89,6 +158,7 @@ export default function LoginPage() {
         <div className="featureStrip"><span>✓ Guest & Host access</span><span>✓ Verified payments</span><span>✓ Google Drive storage</span></div>
       </section>
       <section className="loginCardWrap">
+        {!isStandalone && <button className="installAppBtn" type="button" onClick={installApp} aria-label="Install StayFinder app"><span aria-hidden="true">↓</span> Install App</button>}
         {mode === 'login' ? (
           <form className="loginCard" onSubmit={login}>
             <div className="mobileBrand">StayFinder</div><p className="eyebrow">WELCOME BACK</p><h2>Login to your account</h2>
@@ -111,7 +181,27 @@ export default function LoginPage() {
           </form>
         )}
       </section>
+      {showInstallHelp && (
+        <div className="installHelpBackdrop" role="dialog" aria-modal="true" aria-label="Install StayFinder" onClick={() => setShowInstallHelp(false)}>
+          <div className="installHelpCard" onClick={e => e.stopPropagation()}>
+            <button className="installHelpClose" type="button" onClick={() => setShowInstallHelp(false)} aria-label="Close">×</button>
+            <div className="installHelpIcon">PG</div>
+            <h3>Install StayFinder</h3>
+            <p><b>Android / Chrome:</b> Open the browser menu and tap <b>Install app</b> or <b>Add to Home screen</b>.</p>
+            <p><b>iPhone / Safari:</b> Tap <b>Share</b> and then <b>Add to Home Screen</b>.</p>
+            <button className="primaryBtn" type="button" onClick={() => setShowInstallHelp(false)}>Got it</button>
+          </div>
+        </div>
+      )}
       <style jsx global>{`
+        .installAppBtn { position: fixed; top: 18px; right: 18px; z-index: 80; border: 1px solid rgba(22,83,80,.18); background: #ffffff; color: #174f4d; border-radius: 999px; min-height: 44px; padding: 0 16px; font-weight: 800; box-shadow: 0 10px 30px rgba(18,70,68,.12); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+        .installAppBtn span { font-size: 20px; line-height: 1; }
+        .installHelpBackdrop { position: fixed; inset: 0; z-index: 9999; background: rgba(8,32,31,.52); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(5px); }
+        .installHelpCard { width: min(100%, 430px); position: relative; background: #fff; border-radius: 24px; padding: 28px; box-shadow: 0 24px 80px rgba(0,0,0,.25); color: #0d3433; }
+        .installHelpCard h3 { margin: 12px 0 14px; font-size: 24px; }
+        .installHelpCard p { margin: 10px 0; line-height: 1.55; color: #526967; }
+        .installHelpClose { position: absolute; right: 14px; top: 12px; border: 0; background: #edf5f4; width: 38px; height: 38px; border-radius: 50%; font-size: 24px; cursor: pointer; }
+        .installHelpIcon { width: 58px; height: 58px; border-radius: 16px; background: linear-gradient(135deg,#2f6966,#73aaa6); display: grid; place-items: center; color: #fff; font-size: 20px; font-weight: 900; }
         @media (max-width: 760px) {
           html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
           .loginShell { min-height: 100dvh !important; display: block !important; background: #f5f9f8 !important; }
@@ -129,6 +219,9 @@ export default function LoginPage() {
           .rolePicker button { min-height: 48px !important; }
           .firstVisitBox { width: 100% !important; box-sizing: border-box !important; }
           .errorBox { line-height: 1.4 !important; word-break: break-word !important; }
+          .installAppBtn { top: auto !important; right: 14px !important; bottom: calc(14px + env(safe-area-inset-bottom)) !important; min-height: 48px !important; padding: 0 18px !important; }
+          .installHelpBackdrop { align-items: flex-end !important; padding: 0 !important; }
+          .installHelpCard { width: 100% !important; max-width: none !important; border-radius: 24px 24px 0 0 !important; padding: 26px 20px calc(24px + env(safe-area-inset-bottom)) !important; }
         }
       `}</style>
     </main>
