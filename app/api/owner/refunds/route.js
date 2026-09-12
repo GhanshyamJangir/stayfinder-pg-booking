@@ -1,0 +1,5 @@
+import { NextResponse } from 'next/server';
+import { readSession } from '../../../../lib/session';
+import { listOwnerRefunds, initiateOwnerRefund, submitRefundProof } from '../../../../lib/refunds';
+export async function GET(){const u=await readSession();if(!u||u.role!=='owner')return NextResponse.json({ok:false},{status:401});return NextResponse.json({ok:true,refunds:await listOwnerRefunds(u.sub)});}
+export async function POST(req){try{const u=await readSession();if(!u||u.role!=='owner')return NextResponse.json({ok:false},{status:401});const ct=req.headers.get('content-type')||'';if(ct.includes('multipart/form-data')){const f=await req.formData();const file=f.get('proof');const refund=await submitRefundProof(u.sub,{refundId:f.get('refundId'),transactionRef:f.get('transactionRef'),file:file&&typeof file.arrayBuffer==='function'?file:null});return NextResponse.json({ok:true,refund});}const b=await req.json();return NextResponse.json({ok:true,refund:await initiateOwnerRefund(u.sub,b.bookingId,b.reason)},{status:201});}catch(e){return NextResponse.json({ok:false,error:e.message},{status:400});}}

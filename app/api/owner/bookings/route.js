@@ -1,0 +1,3 @@
+import { NextResponse } from 'next/server';import { readSession } from '../../../../lib/session';import { listOwnerBookings,updateBookingStatus } from '../../../../lib/bookings';
+export async function GET(){const u=await readSession();if(!u||u.role!=='owner')return NextResponse.json({ok:false},{status:401});return NextResponse.json({ok:true,bookings:await listOwnerBookings(u.sub)});}
+export async function PATCH(req){try{const u=await readSession();if(!u||u.role!=='owner')return NextResponse.json({ok:false},{status:401});const b=await req.json();await updateBookingStatus(u.sub,b.bookingId,b.status);return NextResponse.json({ok:true});}catch(e){return NextResponse.json({ok:false,error:e.message},{status:400});}}

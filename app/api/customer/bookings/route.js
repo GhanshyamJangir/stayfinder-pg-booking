@@ -1,0 +1,3 @@
+import { NextResponse } from 'next/server';import { readSession } from '../../../../lib/session';import { listCustomerBookings,createBooking } from '../../../../lib/bookings';
+export async function GET(){const u=await readSession();if(!u||u.role!=='customer')return NextResponse.json({ok:false},{status:401});return NextResponse.json({ok:true,bookings:await listCustomerBookings(u.sub)});}
+export async function POST(req){try{const u=await readSession();if(!u||u.role!=='customer')return NextResponse.json({ok:false},{status:401});return NextResponse.json({ok:true,booking:await createBooking(u.sub,await req.json())},{status:201});}catch(e){return NextResponse.json({ok:false,error:e.message},{status:400});}}

@@ -1,0 +1,25 @@
+STAYFINDER - VERCEL DEPLOY
+
+This update is Vercel-ready. Do not upload .env.local to GitHub/Vercel.
+
+1) Push/Import the complete PG Booking New project into Vercel.
+2) Vercel Project Settings -> Environment Variables.
+3) Copy every REAL variable from your local .env.local into Vercel (Production, Preview, Development as required).
+   Important examples used by this project may include:
+   AUTH_SECRET
+   GOOGLE_* / service account values used by your Sheets/Drive code
+   GOOGLE_MAPS_API_KEY (only after Places API is configured)
+   and any other variables already present in your .env.local.
+4) Do NOT upload service-account JSON or secrets into public GitHub.
+5) Framework preset: Next.js. Build command: default. Output directory: default.
+6) Deploy. After deployment, test:
+   /                     login/create account
+   Guest login -> Explore / My Bookings / Account / Logout
+   Host login  -> Bookings / Add PG / Payments / Logout
+7) If your production OAuth/Google configuration has redirect URLs or allowed origins, add the final https://<project>.vercel.app URL there too.
+
+LOCAL MOBILE TESTING remains:
+  npm run dev -- -H 0.0.0.0 -p 5555
+  phone: http://<PC-LAN-IP>:5555
+
+Note: allowedDevOrigins is only relevant to local development; Vercel production is HTTPS and does not use that LAN origin setting.

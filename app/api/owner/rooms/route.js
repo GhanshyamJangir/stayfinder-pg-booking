@@ -1,0 +1,3 @@
+import { NextResponse } from 'next/server';import { readSession } from '../../../../lib/session';import { listRoomsByOwner,createRoom } from '../../../../lib/rooms';
+export async function GET(){const u=await readSession();if(!u||u.role!=='owner')return NextResponse.json({ok:false},{status:401});return NextResponse.json({ok:true,rooms:await listRoomsByOwner(u.sub)});}
+export async function POST(req){try{const u=await readSession();if(!u||u.role!=='owner')return NextResponse.json({ok:false},{status:401});return NextResponse.json({ok:true,room:await createRoom(u.sub,await req.json())},{status:201});}catch(e){return NextResponse.json({ok:false,error:e.message},{status:400});}}
