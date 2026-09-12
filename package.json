@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "user:create": "node scripts/create-user.mjs"
+    "user:create": "node scripts/create-user.mjs",
+    "admin:create": "node scripts/create-admin.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

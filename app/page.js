@@ -89,6 +89,7 @@ export default function LoginPage() {
       const data = await r.json();
       if (data.user?.role === 'owner') router.replace('/owner');
       if (data.user?.role === 'customer') router.replace('/customer');
+      if (data.user?.role === 'admin') router.replace('/admin');
     }).catch(() => {});
   }, [router]);
 
@@ -108,7 +109,7 @@ export default function LoginPage() {
       let data = {};
       try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(`Login service returned an invalid response (HTTP ${res.status}).`); }
       if (!res.ok || !data?.user) throw new Error(data.error || 'Login failed. Please check your username and password.');
-      const target = data.user.role === 'owner' ? '/owner' : '/customer';
+      const target = data.user.role === 'admin' ? '/admin' : data.user.role === 'owner' ? '/owner' : '/customer';
       // Full navigation is more reliable on mobile/LAN because it reloads with the new session cookie.
       window.location.replace(target);
     } catch (err) {
@@ -142,7 +143,7 @@ export default function LoginPage() {
       let data = {};
       try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(`Account service returned an invalid response (HTTP ${res.status}).`); }
       if (!res.ok || !data?.user) throw new Error(data.error || 'Account could not be created.');
-      const target = data.user.role === 'owner' ? '/owner' : '/customer';
+      const target = data.user.role === 'admin' ? '/admin' : data.user.role === 'owner' ? '/owner' : '/customer';
       window.location.replace(target);
     } catch (err) {
       setError(err?.message || 'Unable to create the account. Please try again.');
