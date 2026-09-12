@@ -48,9 +48,29 @@ export async function POST(req, { params }) {
     return NextResponse.json({ ok: true, images: ids });
   } catch (error) {
     console.error('PG_PHOTO_UPLOAD_ERROR', error);
+
+    const raw = String(error?.message || '');
+    const code = String(error?.code || error?.response?.data?.error || '');
+    const authFailure = /invalid_grant|invalid credentials|unauthorized|token has been expired|token has been revoked/i.test(`${raw} ${code}`);
+
+    if (authFailure) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: 'DRIVE_AUTH_UNAVAILABLE',
+          error: 'Photos could not be uploaded right now. Your PG details are already saved.',
+        },
+        { status: 503 }
+      );
+    }
+
     return NextResponse.json(
-      { ok: false, error: error.message || 'Photo upload failed' },
-      { status: 400 }
+      {
+        ok: false,
+        code: 'PHOTO_UPLOAD_FAILED',
+        error: 'Photos could not be uploaded right now. Your PG details are already saved.',
+      },
+      { status: 503 }
     );
   }
 }
