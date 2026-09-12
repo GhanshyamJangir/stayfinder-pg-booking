@@ -9,7 +9,7 @@ const geoDistanceKm=(a,b,c,d)=>{const R=6371,toRad=x=>x*Math.PI/180;const dLat=t
 
 export default function DashboardShell({user,role}){
  const router=useRouter(); const owner=role==='owner';
- const [notice,setNotice]=useState(''); const [loading,setLoading]=useState(false); const [processingText,setProcessingText]=useState(''); const [contactInfo,setContactInfo]=useState(null);
+ const [notice,setNotice]=useState(''); const [loading,setLoading]=useState(false); const [processingText,setProcessingText]=useState(''); const [contactInfo,setContactInfo]=useState(null); const liveChannelRef=useRef(null);
  // customer
  const [customerView,setCustomerView]=useState('explore'); const [pgs,setPgs]=useState([]); const [bookings,setBookings]=useState([]); const [payments,setPayments]=useState([]); const [customerRefunds,setCustomerRefunds]=useState([]); const [selectedPg,setSelectedPg]=useState(null); const [saved,setSaved]=useState([]);
  const [city,setCity]=useState('Jaipur'),[searchArea,setSearchArea]=useState(''),[roomType,setRoomType]=useState('Any'),[gender,setGender]=useState('Any'),[maxPrice,setMaxPrice]=useState('20000'),[activeCategory,setActiveCategory]=useState('All PGs'); const [customerLocation,setCustomerLocation]=useState(null); const [locationStatus,setLocationStatus]=useState('');
@@ -66,6 +66,12 @@ export default function DashboardShell({user,role}){
   setNotice('Property location selected.');
  }
 
+ function notifyLiveUpdate(scope='all'){
+  const payload={scope,at:Date.now()};
+  try{liveChannelRef.current?.postMessage(payload);}catch{}
+  try{localStorage.setItem('stayfinder_live_update',JSON.stringify(payload));}catch{}
+ }
+
  async function jsonFetch(url,opts){
   const r=await fetch(url,{cache:'no-store',...opts});
   const text=await r.text();
@@ -74,18 +80,20 @@ export default function DashboardShell({user,role}){
     throw new Error(`${url} returned an invalid response (HTTP ${r.status}). Check the server log for details.`);
   }
   if(!r.ok||!d.ok)throw new Error(d.error||`${url} request failed (HTTP ${r.status})`);
+  const method=String(opts?.method||'GET').toUpperCase();
+  if(method!=='GET'&&method!=='HEAD')notifyLiveUpdate(url.includes('/owner/')?'owner':url.includes('/customer/')?'customer':'all');
   return d;
  }
 
- async function loadCustomer(){
-  setLoading(true);
+ async function loadCustomer(silent=false){
+  if(!silent)setLoading(true);
   setNotice('');
   // Marketplace listing is the primary payload. Secondary history APIs must not blank the whole Explore screen.
   try{
     const a=await jsonFetch('/api/customer/pgs');
     setPgs(a.pgs||[]);
   }catch(e){
-    setPgs([]);setNotice(e.message);setLoading(false);return;
+    setPgs([]);setNotice(e.message);if(!silent)setLoading(false);return;
   }
   const results=await Promise.allSettled([
     jsonFetch('/api/customer/bookings'),
@@ -98,13 +106,13 @@ export default function DashboardShell({user,role}){
   if(results[2].status==='fulfilled')setCustomerRefunds(results[2].value.refunds||[]);
   if(results[3].status==='fulfilled'){const rs=results[3].value.settings||null;setRefundSettings(rs);if(rs)setRefundSettingsForm({upiName:rs.upiName||'',upiId:rs.upiId||'',bankName:rs.bankName||'',accountHolder:rs.accountHolder||'',accountNumber:rs.accountNumber||'',ifsc:rs.ifsc||'',qr:null});}
   const failed=results.find(x=>x.status==='rejected');
-  if(failed)setNotice(`Some account data could not be loaded: ${failed.reason?.message||'Unknown error'}`);
-  setLoading(false);
+  if(failed&&!silent)setNotice(`Some account data could not be loaded: ${failed.reason?.message||'Unknown error'}`);
+  if(!silent)setLoading(false);
  }
  async function loadCustomerProfile(){try{const d=await jsonFetch('/api/customer/profile');const cp=d.profile||{};setCustomerProfile(cp);setCustomerProfileForm({mobile:cp.mobile||'',email:cp.email||''});}catch(e){setNotice(e.message);}}
- async function loadOwnerBase(){
-  if(ownerBaseLoaded.current)return;
-  setLoading(true);setNotice('');
+ async function loadOwnerBase(force=false,silent=false){
+  if(!force&&ownerBaseLoaded.current)return;
+  if(!silent){setLoading(true);setNotice('');}
   const results=await Promise.allSettled([jsonFetch('/api/owner/pgs'),jsonFetch('/api/owner/rooms')]);
   const [a,b]=results;
   if(a.status==='fulfilled'){
@@ -115,11 +123,11 @@ export default function DashboardShell({user,role}){
   }
   if(b.status==='fulfilled')setRooms(b.value.rooms||[]);
   const failed=results.find(x=>x.status==='rejected');
-  if(failed)setNotice(failed.reason?.message||'Property data is temporarily unavailable.');
+  if(failed){if(!silent)setNotice(failed.reason?.message||'Property data is temporarily unavailable.');}
   else ownerBaseLoaded.current=true;
-  setLoading(false);
+  if(!silent)setLoading(false);
  }
- async function loadOwnerViewData(view,force=false){
+ async function loadOwnerViewData(view,force=false,silent=false){
   if(!owner)return;
   if(!force&&ownerViewLoaded.current.has(view))return;
   const map={
@@ -131,7 +139,7 @@ export default function DashboardShell({user,role}){
   };
   const urls=map[view]||[];
   if(!urls.length){ownerViewLoaded.current.add(view);return;}
-  setLoading(true);
+  if(!silent)setLoading(true);
   const results=await Promise.allSettled(urls.map(u=>jsonFetch(u)));
   results.forEach((r,i)=>{
    if(r.status!=='fulfilled')return;
@@ -146,12 +154,30 @@ export default function DashboardShell({user,role}){
   });
   const failed=results.find(x=>x.status==='rejected');
   if(!failed)ownerViewLoaded.current.add(view);
-  else if(view==='bookings'||view==='payments')setNotice(failed.reason?.message||'This section is temporarily unavailable. Please try again shortly.');
-  setLoading(false);
+  else if(!silent&&(view==='bookings'||view==='payments'))setNotice(failed.reason?.message||'This section is temporarily unavailable. Please try again shortly.');
+  if(!silent)setLoading(false);
+ }
+ async function refreshOwner(targetView=ownerView,silent=false){
+  ownerBaseLoaded.current=false;
+  ownerViewLoaded.current.delete(targetView);
+  await loadOwnerBase(true,silent);
+  await loadOwnerViewData(targetView,true,silent);
  }
  const savedKey=`pg_saved_${String(user?.id||user?.sub||user?.username||'guest')}`;
  useEffect(()=>{try{setSaved(JSON.parse(localStorage.getItem(savedKey)||'[]'));}catch{setSaved([])} if(owner)loadOwnerBase();else loadCustomer();},[owner,savedKey]);
  useEffect(()=>{if(!owner)return;setNotice('');loadOwnerViewData(ownerView);},[owner,ownerView]);
+ useEffect(()=>{
+  if(typeof window==='undefined')return;
+  const handleSync=()=>{if(document.visibilityState==='hidden')return;owner?refreshOwner(ownerView,true):loadCustomer(true);};
+  let bc=null;
+  try{bc=new BroadcastChannel('stayfinder-live');liveChannelRef.current=bc;bc.onmessage=handleSync;}catch{}
+  const onStorage=e=>{if(e.key==='stayfinder_live_update')handleSync();};
+  const onFocus=()=>handleSync();
+  const onVisible=()=>{if(document.visibilityState==='visible')handleSync();};
+  window.addEventListener('storage',onStorage);window.addEventListener('focus',onFocus);document.addEventListener('visibilitychange',onVisible);
+  const timer=setInterval(handleSync,20000);
+  return()=>{clearInterval(timer);window.removeEventListener('storage',onStorage);window.removeEventListener('focus',onFocus);document.removeEventListener('visibilitychange',onVisible);try{bc?.close();}catch{}if(liveChannelRef.current===bc)liveChannelRef.current=null;};
+ },[owner,ownerView]);
 
  const filteredPgs=useMemo(()=>{const list=pgs.filter(pg=>{const text=`${pg.name} ${pg.address} ${pg.city}`.toLowerCase();const minRent=Math.min(...(pg.rooms||[]).map(r=>r.rent).filter(Boolean),999999);return(!searchArea.trim()||text.includes(searchArea.trim().toLowerCase()))&&(!city||String(pg.city).toLowerCase()===city.toLowerCase())&&(gender==='Any'||pg.gender===gender)&&(roomType==='Any'||(pg.rooms||[]).some(r=>String(r.type).toLowerCase().includes(roomType.toLowerCase())))&&(!maxPrice||minRent<=Number(maxPrice))&&(activeCategory==='All PGs'||(activeCategory==='Budget'&&minRent<=7000)||(activeCategory==='Girls'&&pg.gender==='Girls')||(activeCategory==='Boys'&&pg.gender==='Boys')||(activeCategory==='Co-Living'&&pg.gender==='Unisex')||(activeCategory==='Top Rated'));}); if(!customerLocation)return list;return [...list].sort((x,y)=>{const xd=x.latitude&&x.longitude?geoDistanceKm(customerLocation.lat,customerLocation.lng,Number(x.latitude),Number(x.longitude)):999999;const yd=y.latitude&&y.longitude?geoDistanceKm(customerLocation.lat,customerLocation.lng,Number(y.latitude),Number(y.longitude)):999999;return xd-yd;});},[pgs,searchArea,city,gender,roomType,maxPrice,activeCategory,customerLocation]);
  function toggleSaved(id){setSaved(prev=>{const n=prev.includes(id)?prev.filter(x=>x!==id):[...prev,id];localStorage.setItem(savedKey,JSON.stringify(n));return n;});}
@@ -168,17 +194,17 @@ export default function DashboardShell({user,role}){
  function removePhoto(i){setPhotos(p=>p.filter((_,x)=>x!==i));}
  function toggleAmenity(a){setPgForm(p=>({...p,amenities:p.amenities.includes(a)?p.amenities.filter(x=>x!==a):[...p.amenities,a]}));}
  async function savePg(e){e.preventDefault();if(photos.length<5||photos.length>8){setNotice('A PG requires 5 to 8 images.');return;}setProcessingText('Saving PG details and photos...');try{setLoading(true);const d=await jsonFetch('/api/owner/pgs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(pgForm)});let photosSaved=false;try{const fd=new FormData();photos.forEach(f=>fd.append('photos',f));await jsonFetch(`/api/owner/pgs/${d.pg.id}/photos`,{method:'POST',body:fd});photosSaved=true;}catch(photoError){console.error('PG_PHOTO_UPLOAD_CLIENT_ERROR',photoError);}
- setPgForm({name:'',address:'',city:'Jaipur',description:'',gender:'Boys',amenities:['Wi-Fi','CCTV'],status:'Active',latitude:'',longitude:''});setOwnerPlaceQuery('');setOwnerPlaceSuggestions([]);setPhotos([]);setOwnerView('rooms');await loadOwner();setNotice(photosSaved?'PG and photos saved successfully.':'PG saved successfully. Photos could not be uploaded right now.');}catch(e){setNotice(e.message);}finally{setLoading(false);setProcessingText('');}}
- async function saveRoom(e){e.preventDefault();setProcessingText('Saving room inventory...');try{const out=await jsonFetch('/api/owner/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(roomForm)});setRoomForm(x=>({...x,type:'Single',totalBeds:1,availableBeds:1,rent:'',deposit:''}));setNotice(out?.room?.merged?'Room inventory increased successfully.':'Room type added successfully.');await loadOwner();}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
- async function bookingAction(id,status){setProcessingText(`Updating booking status...`);try{await jsonFetch('/api/owner/bookings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({bookingId:id,status})});setNotice(`Booking status updated successfully.`);await loadOwner();}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
+ setPgForm({name:'',address:'',city:'Jaipur',description:'',gender:'Boys',amenities:['Wi-Fi','CCTV'],status:'Active',latitude:'',longitude:''});setOwnerPlaceQuery('');setOwnerPlaceSuggestions([]);setPhotos([]);setOwnerView('rooms');await refreshOwner('rooms');setNotice(photosSaved?'PG and photos saved successfully.':'PG saved successfully. Photos could not be uploaded right now.');}catch(e){setNotice(e.message);}finally{setLoading(false);setProcessingText('');}}
+ async function saveRoom(e){e.preventDefault();setProcessingText('Saving room inventory...');try{const out=await jsonFetch('/api/owner/rooms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(roomForm)});setRoomForm(x=>({...x,type:'Single',totalBeds:1,availableBeds:1,rent:'',deposit:''}));setNotice(out?.room?.merged?'Room inventory increased successfully.':'Room type added successfully.');await refreshOwner(ownerView);}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
+ async function bookingAction(id,status){setProcessingText(`Updating booking status...`);try{await jsonFetch('/api/owner/bookings',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({bookingId:id,status})});setNotice(`Booking status updated successfully.`);await refreshOwner(ownerView);}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
  async function saveOwnerPaymentSettings(e){e.preventDefault();setProcessingText('Saving payment settings...');try{setLoading(true);const f=new FormData();Object.entries(ownerPayForm).forEach(([k,v])=>{if(k==='qr'){if(v)f.append('qr',v);}else f.append(k,v??'')});const d=await jsonFetch('/api/owner/payment-settings',{method:'POST',body:f});setOwnerPaySettings(d.settings);setOwnerPayForm({upiName:'',upiId:'',bankName:'',accountHolder:'',accountNumber:'',ifsc:'',note:'',qr:null});setNotice('Payment details saved successfully.');}catch(e){setNotice(e.message);}finally{setLoading(false);setProcessingText('');}}
- async function paymentAction(id,status){let reason='';if(status==='Rejected'){reason=window.prompt('What needs to be corrected in the payment proof?','Unable to verify the transaction ID or screenshot.')||'';if(!reason.trim())return;}setProcessingText(status==='Verified'?'Verifying payment...':'Sending correction request...');try{await jsonFetch('/api/owner/payments',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:id,status,reason})});setNotice(status==='Verified'?'Payment verified. Booking confirmed.':'Correction request sent to the customer.');await loadOwner();}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
+ async function paymentAction(id,status){let reason='';if(status==='Rejected'){reason=window.prompt('What needs to be corrected in the payment proof?','Unable to verify the transaction ID or screenshot.')||'';if(!reason.trim())return;}setProcessingText(status==='Verified'?'Verifying payment...':'Sending correction request...');try{await jsonFetch('/api/owner/payments',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({paymentId:id,status,reason})});setNotice(status==='Verified'?'Payment verified. Booking confirmed.':'Correction request sent to the customer.');await refreshOwner(ownerView);}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
 
- async function startRefund(bookingId){const reason=window.prompt('Enter the cancellation reason shown to the customer:','Property or room availability issue')||'';if(!reason.trim())return;setProcessingText('Starting cancellation and refund...');try{await jsonFetch('/api/owner/refunds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bookingId,reason})});setNotice('Booking cancelled and bed released. Send the full refund and upload proof.');setOwnerView('payments');await loadOwner();}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
- async function submitRefund(e){e.preventDefault();if(!refundForm.refundId)throw new Error('Select a refund.');if(!/^\d{12}$/.test(refundForm.transactionRef)){setNotice('Refund transaction reference must be exactly 12 digits.');return;}if(!refundForm.proof){setNotice('Select a refund proof screenshot.');return;}setProcessingText('Uploading refund proof...');try{const f=new FormData();f.append('refundId',refundForm.refundId);f.append('transactionRef',refundForm.transactionRef);f.append('proof',refundForm.proof);await jsonFetch('/api/owner/refunds',{method:'POST',body:f});setRefundForm({refundId:'',transactionRef:'',proof:null});setRefundFileKey(k=>k+1);setNotice('Refund marked as sent. Customer confirmation is pending.');await loadOwner();}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
+ async function startRefund(bookingId){const reason=window.prompt('Enter the cancellation reason shown to the customer:','Property or room availability issue')||'';if(!reason.trim())return;setProcessingText('Starting cancellation and refund...');try{await jsonFetch('/api/owner/refunds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({bookingId,reason})});setNotice('Booking cancelled and bed released. Send the full refund and upload proof.');setOwnerView('payments');await refreshOwner('payments');}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
+ async function submitRefund(e){e.preventDefault();if(!refundForm.refundId)throw new Error('Select a refund.');if(!/^\d{12}$/.test(refundForm.transactionRef)){setNotice('Refund transaction reference must be exactly 12 digits.');return;}if(!refundForm.proof){setNotice('Select a refund proof screenshot.');return;}setProcessingText('Uploading refund proof...');try{const f=new FormData();f.append('refundId',refundForm.refundId);f.append('transactionRef',refundForm.transactionRef);f.append('proof',refundForm.proof);await jsonFetch('/api/owner/refunds',{method:'POST',body:f});setRefundForm({refundId:'',transactionRef:'',proof:null});setRefundFileKey(k=>k+1);setNotice('Refund marked as sent. Customer confirmation is pending.');await refreshOwner(ownerView);}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
  async function customerRefundAction(refundId,action){let note='';if(action==='issue'){note=window.prompt('Describe the refund issue:','Refund not received / transaction mismatch')||'';if(!note.trim())return;}setProcessingText(action==='received'?'Confirming refund receipt...':'Reporting refund issue...');try{await jsonFetch('/api/customer/refunds',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({refundId,action,note})});setNotice(action==='received'?'Refund receipt confirmed. Cancellation is complete.':'Refund issue reported to the owner.');await loadCustomer();}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
  async function showConfirmedContact(bookingId){setProcessingText('Loading confirmed stay details...');try{const d=await jsonFetch(`/api/customer/bookings/${bookingId}/contact`);setContactInfo(d.contact);}catch(e){setNotice(e.message);}finally{setProcessingText('');}}
- async function captureLocation(pgId){if(!navigator.geolocation){setNotice('Location is not supported in this browser.');return;}setProcessingText('Capturing exact GPS location...');navigator.geolocation.getCurrentPosition(async pos=>{try{await jsonFetch('/api/owner/pgs',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({pgId,latitude:pos.coords.latitude,longitude:pos.coords.longitude})});setNotice('Exact GPS location saved.');await loadOwner();}catch(e){setNotice(e.message);}finally{setProcessingText('');}},err=>{setProcessingText('');setNotice(err.code===1?'Please allow location permission and try again.':'Unable to capture exact location.');},{enableHighAccuracy:true,timeout:15000,maximumAge:0});}
+ async function captureLocation(pgId){if(!navigator.geolocation){setNotice('Location is not supported in this browser.');return;}setProcessingText('Capturing exact GPS location...');navigator.geolocation.getCurrentPosition(async pos=>{try{await jsonFetch('/api/owner/pgs',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({pgId,latitude:pos.coords.latitude,longitude:pos.coords.longitude})});setNotice('Exact GPS location saved.');await refreshOwner(ownerView);}catch(e){setNotice(e.message);}finally{setProcessingText('');}},err=>{setProcessingText('');setNotice(err.code===1?'Please allow location permission and try again.':'Unable to capture exact location.');},{enableHighAccuracy:true,timeout:15000,maximumAge:0});}
  function captureNewPgLocation(){if(!navigator.geolocation){setNotice('Location is not supported in this browser.');return;}setProcessingText('Capturing PG location...');navigator.geolocation.getCurrentPosition(pos=>{setPgForm(x=>({...x,latitude:String(pos.coords.latitude),longitude:String(pos.coords.longitude)}));setProcessingText('');setNotice('Exact location captured.');},err=>{setProcessingText('');setNotice(err.code===1?'Please allow location permission and try again.':'Unable to capture location.');},{enableHighAccuracy:true,timeout:15000,maximumAge:0});}
 
  if(!owner) return <><MobileResponsiveStyles/><CustomerApp user={user} logout={logout} view={customerView} setView={setCustomerView} loading={loading} notice={notice} pgs={pgs} filteredPgs={filteredPgs} saved={saved} toggleSaved={toggleSaved} openPg={openPg} selectedPg={selectedPg} setSelectedPg={setSelectedPg} bookingForm={bookingForm} setBookingForm={setBookingForm} createBooking={createBooking} bookings={bookings} payments={payments} refunds={customerRefunds} customerRefundAction={customerRefundAction} paymentForm={paymentForm} setPaymentForm={setPaymentForm} paymentFileKey={paymentFileKey} submitPayment={submitPayment} selectPaymentBooking={selectPaymentBooking} customerPaySettings={customerPaySettings} showConfirmedContact={showConfirmedContact} contactInfo={contactInfo} setContactInfo={setContactInfo} city={city} setCity={setCity} searchArea={searchArea} setSearchArea={setSearchArea} roomType={roomType} setRoomType={setRoomType} gender={gender} setGender={setGender} maxPrice={maxPrice} setMaxPrice={setMaxPrice} activeCategory={activeCategory} setActiveCategory={setActiveCategory} customerLocation={customerLocation} locationStatus={locationStatus} useCustomerLocation={useCustomerLocation} refundSettings={refundSettings} refundSettingsForm={refundSettingsForm} setRefundSettingsForm={setRefundSettingsForm} refundQrKey={refundQrKey} saveRefundSettings={saveRefundSettings} customerProfile={customerProfile} customerProfileForm={customerProfileForm} setCustomerProfileForm={setCustomerProfileForm} saveCustomerProfile={saveCustomerProfile} loadCustomerProfile={loadCustomerProfile} helpOpen={helpOpen} setHelpOpen={setHelpOpen}/><ProcessingOverlay text={processingText}/></>;
