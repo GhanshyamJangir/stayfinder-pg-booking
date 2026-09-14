@@ -198,7 +198,7 @@ export default function LoginPage() {
       <section className="brandPanel">
         <div className="brandMark">PG</div>
         <div><p className="eyebrow">SMART STAY</p><h1>StayFinder</h1><p className="brandText">Find the right stay. Book with confidence.</p></div>
-        <div className="featureStrip"><span>✓ Guest & Host access</span><span>✓ Verified payments</span><span>✓ Google Drive storage</span></div>
+        <div className="featureStrip"><span>✓ Customer & Owner access</span><span>✓ Verified payments</span><span>✓ Google Drive storage</span></div>
       </section>
       <section className="loginCardWrap">
         {!isStandalone && <button className="installAppBtn" type="button" onClick={installApp} aria-label="Install StayFinder app"><span aria-hidden="true">↓</span> Install App</button>}
@@ -213,14 +213,14 @@ export default function LoginPage() {
           </form>
         ) : mode === 'register' ? (
           <form className="loginCard registerCard" onSubmit={createAccount}>
-            <div className="mobileBrand">StayFinder</div><p className="eyebrow" style={{textAlign:'center'}}>NEW ACCOUNT</p><h2>Join StayFinder</h2><p className="muted">Join as a Guest to book a stay or as a Host to list your PG.</p>
-            <div className="rolePicker"><button type="button" className={register.role === 'customer' ? 'active' : ''} onClick={() => setRegister({ ...register, role: 'customer' })}>Guest</button><button type="button" className={register.role === 'owner' ? 'active' : ''} onClick={() => setRegister({ ...register, role: 'owner' })}>Host</button></div>
+            <div className="mobileBrand">StayFinder</div><p className="eyebrow" style={{textAlign:'center'}}>NEW ACCOUNT</p><h2>Join StayFinder</h2><p className="muted">Join as a Customer to book a stay or as an Owner to list a PG or single room.</p>
+            <div className="rolePicker"><button type="button" className={register.role === 'customer' ? 'active' : ''} onClick={() => setRegister({ ...register, role: 'customer' })}>Customer</button><button type="button" className={register.role === 'owner' ? 'active' : ''} onClick={() => setRegister({ ...register, role: 'owner' })}>Owner</button></div>
             <label>Full name</label><input required value={register.name} onChange={e => setRegister({ ...register, name: e.target.value })} placeholder="Your full name" />
             <label>Mobile number</label><input required inputMode="numeric" maxLength={10} value={register.mobile} onChange={e => setRegister({ ...register, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })} placeholder="10 digit mobile" />
             <label>Email address</label><input required type="email" value={register.email} onChange={e => setRegister({ ...register, email: e.target.value })} placeholder="name@gmail.com" autoComplete="email" />
             <label>Username</label><input required value={register.username} onChange={e => setRegister({ ...register, username: e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, '') })} placeholder="Choose username" />
             <label>Password</label><div className="passwordField"><input required minLength={6} type={showRegisterPassword ? 'text' : 'password'} value={register.password} onChange={e => setRegister({ ...register, password: e.target.value })} placeholder="Minimum 6 characters" autoComplete="new-password" /><button type="button" aria-label={showRegisterPassword ? 'Hide password' : 'Show password'} style={{touchAction:'manipulation',pointerEvents:'auto'}} onClick={() => setShowRegisterPassword(v => !v)}>{showRegisterPassword ? 'Hide' : 'Show'}</button></div>
-            {error && <div className="errorBox">{error}</div>}<button className="primaryBtn" type="submit" disabled={loading}>{loading ? 'Creating account…' : `Create ${register.role === 'owner' ? 'Host' : 'Guest'} account`}</button>
+            {error && <div className="errorBox">{error}</div>}<button className="primaryBtn" type="submit" disabled={loading}>{loading ? 'Creating account…' : `Create ${register.role === 'owner' ? 'Owner' : 'Customer'} account`}</button>
             <button className="linkBtn" style={{display:'block',margin:'0 auto'}} type="button" onClick={() => { setMode('login'); setError(''); setMessage(''); }}>← Back to login</button>
           </form>
         ) : (
