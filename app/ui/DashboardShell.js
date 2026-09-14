@@ -84,7 +84,7 @@ export default function DashboardShell({user,role}){
   try{d=text?JSON.parse(text):{};}catch{
     throw new Error(`${url} returned an invalid response (HTTP ${r.status}). Check the server log for details.`);
   }
-  if(!r.ok||!d.ok)throw new Error(d.error||`${url} request failed (HTTP ${r.status})`);
+  if(!r.ok||!d.ok){const msg=d.error||`${url} request failed (HTTP ${r.status})`;if(/quota exceeded|resource_exhausted|read requests per minute/i.test(String(msg)))throw new Error('Data is temporarily busy. Please wait a few seconds and try again.');throw new Error(msg);}
   const method=String(opts?.method||'GET').toUpperCase();
   if(method!=='GET'&&method!=='HEAD'){
    let scope='all';
@@ -130,18 +130,10 @@ export default function DashboardShell({user,role}){
  async function loadOwnerBase(force=false,silent=false){
   if(!force&&ownerBaseLoaded.current)return;
   if(!silent){setLoading(true);setNotice('');}
-  const results=await Promise.allSettled([jsonFetch('/api/owner/pgs'),jsonFetch('/api/owner/rooms')]);
-  const [a,b]=results;
-  if(a.status==='fulfilled'){
-   const list=a.value.pgs||[];
-   setOwnerPgs(list);
-   setRoomForm(x=>({...x,pgId:x.pgId||list?.[0]?.id||''}));
-   if(!list.length)setOwnerView('add');
-  }
-  if(b.status==='fulfilled')setRooms(b.value.rooms||[]);
-  const failed=results.find(x=>x.status==='rejected');
-  if(failed){if(!silent)setNotice(failed.reason?.message||'Property data is temporarily unavailable.');}
-  else ownerBaseLoaded.current=true;
+  let pgOk=false,roomOk=false;
+  try{const a=await jsonFetch('/api/owner/pgs');const list=a.pgs||[];setOwnerPgs(list);setRoomForm(x=>({...x,pgId:x.pgId||list?.[0]?.id||''}));if(!list.length&&!ownerPgs.length)setOwnerView('add');pgOk=true;}catch(e){if(!silent)setNotice(e.message||'Listings are temporarily unavailable.');}
+  try{const b=await jsonFetch('/api/owner/rooms');setRooms(b.rooms||[]);roomOk=true;}catch(e){if(!silent&&!pgOk)setNotice(e.message||'Room data is temporarily unavailable.');}
+  if(pgOk&&roomOk)ownerBaseLoaded.current=true;
   if(!silent)setLoading(false);
  }
  async function loadOwnerViewData(view,force=false,silent=false){
@@ -504,6 +496,40 @@ function MobileResponsiveStyles(){return <style jsx global>{`
  .ownerPropertyManageCard{grid-template-columns:96px minmax(0,1fr)!important;min-height:104px!important;border-radius:14px!important}.ownerManageCover{min-height:104px!important}.ownerManageInfo{padding:9px!important}.ownerManageTitle h3{font-size:13px!important}.ownerManageActions button{min-height:30px!important;font-size:8px!important;padding:5px 7px!important}
  .formMainCard,.photoPanel,.simpleForm,.tableCard,.paymentSettingsCard,.paymentProofPanel,.savedPaySummary{padding:11px!important;border-radius:14px!important}.formSectionTitle h3{font-size:13px!important}.formGrid{gap:8px!important}.formGrid input,.formGrid select,.formGrid textarea,.simpleForm input,.simpleForm select,.paymentSettingsCard input,.paymentSettingsCard select,.paymentSettingsCard textarea{min-height:40px!important;font-size:12px!important}.dropzone{min-height:96px!important;padding:11px!important}.photoThumb,.photoSlot{min-height:70px!important}
  .ownerBookingToolbar{gap:7px!important;margin:8px 0 10px!important}.ownerBookingToolbar select,.ownerBookingToolbar input{min-height:40px!important;font-size:12px!important}.mobileOwnerBookingCards>article{padding:11px!important;border-radius:14px!important}.mobileOwnerBookingCards h3{font-size:16px!important}.mobileOwnerBookingCards p{font-size:10px!important;line-height:1.35!important}
+ /* Owner mobile clean mode */
+ .hostApp{background:#fff!important}
+ .hostTopbar{position:sticky!important;top:0!important;z-index:48!important;background:rgba(255,255,255,.97)!important;backdrop-filter:blur(12px)!important;box-shadow:none!important}
+ .hostMobileBrand{width:128px!important;max-width:43vw!important}
+ .hostWelcome{display:grid!important;grid-template-columns:1fr!important;margin:8px 12px 7px!important;padding:10px 11px!important;border-radius:14px!important;background:#fff!important;border:1px solid #e7eeed!important;box-shadow:none!important}
+ .hostWelcome>div:first-child{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;gap:8px!important}
+ .hostWelcome .heroMini{display:none!important}
+ .hostWelcome h1{font-size:18px!important;line-height:1!important;letter-spacing:-.02em!important;margin:0!important;white-space:nowrap!important}
+ .hostWelcomeActions{display:block!important;margin:0!important}
+ .hostWelcomeActions button{min-height:32px!important;padding:0 11px!important;border-radius:999px!important;font-size:9.5px!important;white-space:nowrap!important}
+ .hostWelcomeActions .soft{display:none!important}
+ .hostScore{margin-top:8px!important;padding:6px 8px!important;border:0!important;border-radius:9px!important;background:#f2f7f6!important;display:grid!important;grid-template-columns:auto 1fr auto!important;column-gap:8px!important;row-gap:4px!important;align-items:center!important}
+ .hostScore>span{font-size:7px!important;letter-spacing:.1em!important;white-space:nowrap!important}
+ .hostScore>strong{grid-column:3!important;font-size:12px!important}
+ .hostScore>div:not(.setupMiniChecks){grid-column:1/-1!important;height:3px!important;margin:0!important;background:#dce9e6!important}
+ .hostScore>small,.setupMiniChecks{display:none!important}
+ .hostStats{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:6px!important;padding:0 12px 7px!important}
+ .hostStats article{min-height:54px!important;padding:7px 8px!important;border-radius:12px!important;border:1px solid #e7eeed!important;box-shadow:none!important;gap:7px!important}
+ .hostStats article p{display:none!important}
+ .hostStats .statIcon{width:27px!important;height:27px!important;border-radius:8px!important;font-size:11px!important}
+ .hostStats small{font-size:7px!important;line-height:1!important}
+ .hostStats strong{font-size:15px!important;line-height:1!important;margin-top:2px!important}
+ .hostTwoCol{display:block!important;padding:0 12px 82px!important}
+ .hostTwoCol>.hostPanel:nth-child(2){display:none!important}
+ .hostPanel{padding:9px!important;border-radius:13px!important;border:1px solid #e7eeed!important;box-shadow:none!important}
+ .panelHead{margin-bottom:4px!important}.panelHead .eyebrow{display:none!important}.panelHead h3{font-size:13px!important}.panelHead button{font-size:8px!important;padding:4px 7px!important;border-radius:999px!important;background:#eef6f4!important}
+ .miniProperty{grid-template-columns:40px minmax(0,1fr) auto!important;padding:5px 0!important;gap:7px!important}
+ .miniProperty img,.miniPhoto{width:40px!important;height:40px!important;border-radius:9px!important}
+ .miniProperty b{font-size:11px!important}.miniProperty small{font-size:8px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:100%!important}.miniProperty .liveDot{font-size:7.5px!important}.miniProperty button{font-size:8px!important;padding:5px 7px!important;border-radius:999px!important}
+ .hostPanel .workspaceEmpty{padding:8px 2px!important}.hostPanel .workspaceEmpty span{display:none!important}.hostPanel .workspaceEmpty h3{font-size:9px!important;margin:0!important}
+ .hostMobileNav{background:rgba(255,255,255,.98)!important;backdrop-filter:blur(12px)!important;border-top:1px solid #e8efee!important;box-shadow:0 -5px 18px rgba(16,58,55,.05)!important}
+ .hostMobileNav button{min-height:45px!important;font-size:7.5px!important;color:#647572!important;padding:2px!important}.hostMobileNav button span{font-size:17px!important}.hostMobileNav button.active{background:transparent!important;color:#0b756d!important}
+ .globalNotice{margin:7px 12px!important;padding:7px 9px!important;border-radius:9px!important;font-size:9.5px!important;line-height:1.25!important;max-height:50px!important;overflow:auto!important}
+
 }
 `}</style>}
 
