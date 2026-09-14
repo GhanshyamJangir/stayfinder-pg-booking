@@ -500,14 +500,14 @@ function MobileResponsiveStyles(){return <style jsx global>{`
  .hostApp{background:#fff!important}
  .hostTopbar{position:sticky!important;top:0!important;z-index:48!important;background:rgba(255,255,255,.97)!important;backdrop-filter:blur(12px)!important;box-shadow:none!important}
  .hostMobileBrand{width:128px!important;max-width:43vw!important}
- .hostWelcome{display:grid!important;grid-template-columns:1fr!important;margin:8px 12px 7px!important;padding:10px 11px!important;border-radius:14px!important;background:#fff!important;border:1px solid #e7eeed!important;box-shadow:none!important}
+ .hostWelcome{display:grid!important;grid-template-columns:1fr!important;margin:7px 12px 6px!important;padding:8px 10px!important;border-radius:13px!important;background:#fff!important;border:1px solid #e7eeed!important;box-shadow:none!important;min-height:0!important}
  .hostWelcome>div:first-child{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;gap:8px!important}
  .hostWelcome .heroMini{display:none!important}
- .hostWelcome h1{font-size:18px!important;line-height:1!important;letter-spacing:-.02em!important;margin:0!important;white-space:nowrap!important}
+ .hostWelcome h1{font-size:16px!important;line-height:1!important;letter-spacing:-.02em!important;margin:0!important;white-space:nowrap!important}
  .hostWelcomeActions{display:block!important;margin:0!important}
- .hostWelcomeActions button{min-height:32px!important;padding:0 11px!important;border-radius:999px!important;font-size:9.5px!important;white-space:nowrap!important}
+ .hostWelcomeActions button{min-height:29px!important;padding:0 10px!important;border-radius:999px!important;font-size:9px!important;white-space:nowrap!important}
  .hostWelcomeActions .soft{display:none!important}
- .hostScore{margin-top:8px!important;padding:6px 8px!important;border:0!important;border-radius:9px!important;background:#f2f7f6!important;display:grid!important;grid-template-columns:auto 1fr auto!important;column-gap:8px!important;row-gap:4px!important;align-items:center!important}
+ .hostScore{margin-top:6px!important;padding:5px 7px!important;border:0!important;border-radius:8px!important;background:#f2f7f6!important;display:grid!important;grid-template-columns:auto 1fr auto!important;column-gap:7px!important;row-gap:3px!important;align-items:center!important}
  .hostScore>span{font-size:7px!important;letter-spacing:.1em!important;white-space:nowrap!important}
  .hostScore>strong{grid-column:3!important;font-size:12px!important}
  .hostScore>div:not(.setupMiniChecks){grid-column:1/-1!important;height:3px!important;margin:0!important;background:#dce9e6!important}
