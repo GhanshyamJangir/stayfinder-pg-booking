@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 105" role="img" aria-labelledby="t d">
+ <title id="t">StayFinder</title><desc id="d">House and location pin StayFinder logo</desc>
+ <g transform="translate(6 8)">
+  <path d="M10 44 49 11l39 33v42H63V59H36v27H10Z" fill="none" stroke="#0f4f4b" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M80 20h13v25" fill="none" stroke="#0f4f4b" stroke-width="9" stroke-linejoin="round"/>
+  <path d="M49 28c-14 0-25 11-25 25 0 19 25 39 25 39s25-20 25-39c0-14-11-25-25-25Z" fill="#f4b52f"/>
+  <circle cx="49" cy="53" r="8" fill="#fff"/>
+  <path d="M59 79c8-7 16-10 25-8-2 10-8 17-18 20-4-3-6-7-7-12Z" fill="#18a78f"/>
+ </g>
+ <text x="112" y="61" font-family="Arial,Helvetica,sans-serif" font-size="46" font-weight="800" fill="#102f2d">Stay<tspan fill="#0d8f82">Finder</tspan></text>
+ <text x="114" y="86" font-family="Arial,Helvetica,sans-serif" font-size="17" fill="#657774">Find Your Perfect Stay</text>
+</svg>
