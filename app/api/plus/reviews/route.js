@@ -1,30 +1,8 @@
 import { NextResponse } from 'next/server';
 import { readSession } from '../../../../lib/session';
+import { appendRow, readRows } from '../../../../lib/plus-store';
 import { listCustomerBookings } from '../../../../lib/bookings';
-import { lifecycleForBookings } from '../../../../lib/platform-controls';
-import { readRows, appendRow } from '../../../../lib/plus-store';
-
-const clean=v=>String(v??'').trim();
-const num=(v,d=5)=>Math.min(5,Math.max(1,Number(v)||d));
-
-async function customerContext(){const u=await readSession();if(!u||u.role!=='customer')return null;const bookings=await listCustomerBookings(u.sub);return {u,bookings};}
-export async function GET(){
- try{
-  const u=await readSession();if(!u||!['customer','owner'].includes(u.role))return NextResponse.json({ok:false,error:'Please login first.'},{status:401});
-  const all=await readRows('Reviews');
-  if(u.role==='customer'){
-    const bookings=await listCustomerBookings(u.sub);const ids=bookings.map(b=>b.id);const lifecycle=await lifecycleForBookings(ids);const eligibleBookingIds=lifecycle.filter(x=>clean(x.checkout_verified_at)||clean(x.status)==='Checked Out').map(x=>clean(x.booking_id));
-    return NextResponse.json({ok:true,reviews:all.filter(r=>clean(r.customer_id)===clean(u.sub)).reverse(),eligibleBookingIds});
-  }
-  return NextResponse.json({ok:true,reviews:all.filter(r=>clean(r.status)!=='Hidden').reverse(),eligibleBookingIds:[]});
- }catch(e){console.error('REVIEWS_GET_ERROR',e);return NextResponse.json({ok:false,error:e.message},{status:500});}
-}
-export async function POST(req){
- try{
-  const c=await customerContext();if(!c)return NextResponse.json({ok:false,error:'Customer login required.'},{status:401});const b=await req.json();const bookingId=clean(b.bookingId);const booking=c.bookings.find(x=>clean(x.id)===bookingId);if(!booking)throw new Error('Booking not found.');
-  const life=(await lifecycleForBookings([bookingId]))[0];if(!life||(!clean(life.checkout_verified_at)&&clean(life.status)!=='Checked Out'))throw new Error('Review can be submitted only after checkout is completed.');
-  const reviews=await readRows('Reviews');if(reviews.some(r=>clean(r.booking_id)===bookingId&&clean(r.customer_id)===clean(c.u.sub)))throw new Error('You have already reviewed this stay.');
-  const review={id:`REV-${Date.now().toString(36).toUpperCase()}`,booking_id:bookingId,pg_id:clean(booking.pgId),customer_id:clean(c.u.sub),rating:num(b.rating),cleanliness:num(b.cleanliness),food:num(b.food),location:num(b.location),host_behaviour:num(b.hostBehaviour),value_for_money:num(b.valueForMoney),comment:clean(b.comment).slice(0,1500),status:'Published',created_at:new Date().toISOString()};
-  await appendRow('Reviews',review);return NextResponse.json({ok:true,review},{status:201});
- }catch(e){console.error('REVIEWS_POST_ERROR',e);return NextResponse.json({ok:false,error:e.message},{status:400});}
-}
+const clean=v=>String(v??'').trim(); const num=v=>Math.max(1,Math.min(5,Number(v||0)));
+async function completedIds(customerId){const bookings=await listCustomerBookings(customerId);const mine=new Set(bookings.map(x=>x.id));const stays=await readRows('StayLifecycle');return new Set(stays.filter(x=>mine.has(x.booking_id)&&clean(x.checkout_verified_at)).map(x=>x.booking_id));}
+export async function GET(req){try{const u=await readSession();if(!u)return NextResponse.json({ok:false,error:'Unauthorized'},{status:401});const url=new URL(req.url);let rows=await readRows('Reviews');const pgId=clean(url.searchParams.get('pgId'));if(pgId)rows=rows.filter(x=>x.pg_id===pgId&&x.status!=='Hidden');let eligibleBookingIds=[];if(u.role==='customer'&&!pgId){rows=rows.filter(x=>x.customer_id===clean(u.sub));eligibleBookingIds=[...(await completedIds(u.sub))];}return NextResponse.json({ok:true,reviews:rows,eligibleBookingIds});}catch(e){return NextResponse.json({ok:false,error:e.message},{status:500});}}
+export async function POST(req){try{const u=await readSession();if(!u||u.role!=='customer')return NextResponse.json({ok:false,error:'Customer only'},{status:403});const b=await req.json();const bookings=await listCustomerBookings(u.sub);const bk=bookings.find(x=>x.id===clean(b.bookingId));if(!bk)throw new Error('Booking not found.');const eligible=await completedIds(u.sub);if(!eligible.has(bk.id))throw new Error('Review can be submitted only after checkout is completed.');const rows=await readRows('Reviews');if(rows.some(x=>x.booking_id===bk.id&&x.customer_id===clean(u.sub)))throw new Error('Review already submitted for this booking.');const row={id:`REV-${Date.now().toString(36).toUpperCase()}`,booking_id:bk.id,pg_id:bk.pgId,customer_id:clean(u.sub),rating:num(b.rating),cleanliness:num(b.cleanliness||b.rating),food:num(b.food||b.rating),location:num(b.location||b.rating),host_behaviour:num(b.hostBehaviour||b.rating),value_for_money:num(b.valueForMoney||b.rating),comment:clean(b.comment),status:'Published',created_at:new Date().toISOString()};await appendRow('Reviews',row);return NextResponse.json({ok:true,review:row},{status:201});}catch(e){return NextResponse.json({ok:false,error:e.message},{status:400});}}

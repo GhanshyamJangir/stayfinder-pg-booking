@@ -18,7 +18,10 @@ export default function DashboardShell({user,role}){
  // owner
  const [ownerView,setOwnerView]=useState('overview'),[ownerPgs,setOwnerPgs]=useState([]),[rooms,setRooms]=useState([]),[ownerBookings,setOwnerBookings]=useState([]),[ownerPayments,setOwnerPayments]=useState([]),[ownerRefunds,setOwnerRefunds]=useState([]);
  const [pgForm,setPgForm]=useState({listingType:'PG',name:'',address:'',city:'Jaipur',description:'',gender:'Boys',amenities:['Wi-Fi','CCTV'],status:'Active',latitude:'',longitude:''}); const [photos,setPhotos]=useState([]); const [helpOpen,setHelpOpen]=useState(false); const [ownerPreviewPg,setOwnerPreviewPg]=useState(null); const [ownerPlaceQuery,setOwnerPlaceQuery]=useState(''); const [ownerPlaceSuggestions,setOwnerPlaceSuggestions]=useState([]); const [ownerPlaceSearching,setOwnerPlaceSearching]=useState(false); const skipOwnerPlaceSearch=useRef(false); const ownerBaseLoaded=useRef(false); const ownerViewLoaded=useRef(new Set());
- const [roomForm,setRoomForm]=useState({pgId:'',type:'Single',totalBeds:1,availableBeds:1,rent:'',deposit:''}); const [ownerPaySettings,setOwnerPaySettings]=useState(null); const [ownerPayForm,setOwnerPayForm]=useState({upiName:'',upiId:'',bankName:'',accountHolder:'',accountNumber:'',ifsc:'',note:'',qr:null}); const [refundForm,setRefundForm]=useState({refundId:'',transactionRef:'',proof:null}); const [refundFileKey,setRefundFileKey]=useState(0);
+ const [roomForm,setRoomForm]=useState({pgId:'',type:'Single',totalBeds:1,availableBeds:1,rent:'',deposit:''}); const [ownerPaySettings,setOwnerPaySettings]=useState(null);
+ const ownerCacheKey=`stayfinder_owner_snapshot_${String(user?.id||user?.sub||user?.username||'owner')}`;
+ function readOwnerSnapshot(){try{return JSON.parse(localStorage.getItem(ownerCacheKey)||'{}')||{};}catch{return {};}}
+ function cacheOwnerPart(key,value){try{const old=readOwnerSnapshot();localStorage.setItem(ownerCacheKey,JSON.stringify({...old,[key]:value,updatedAt:Date.now()}));}catch{}} const [ownerPayForm,setOwnerPayForm]=useState({upiName:'',upiId:'',bankName:'',accountHolder:'',accountNumber:'',ifsc:'',note:'',qr:null}); const [refundForm,setRefundForm]=useState({refundId:'',transactionRef:'',proof:null}); const [refundFileKey,setRefundFileKey]=useState(0);
 
  async function logout(){
   if(typeof window!=='undefined'&&window.__stayfinderLoggingOut)return;
@@ -127,14 +130,21 @@ export default function DashboardShell({user,role}){
   if(!silent)setLoading(false);
  }
  async function loadCustomerProfile(){try{const d=await jsonFetch('/api/customer/profile');const cp=d.profile||{};setCustomerProfile(cp);setCustomerProfileForm({mobile:cp.mobile||'',email:cp.email||''});}catch(e){setNotice(e.message);}}
- async function loadOwnerBase(force=false,silent=false){
+ async function loadOwnerBase(force=false,silent=false,retry=true){
   if(!force&&ownerBaseLoaded.current)return;
   if(!silent){setLoading(true);setNotice('');}
   let pgOk=false,roomOk=false;
-  try{const a=await jsonFetch('/api/owner/pgs');const list=a.pgs||[];setOwnerPgs(list);setRoomForm(x=>({...x,pgId:x.pgId||list?.[0]?.id||''}));if(!list.length&&!ownerPgs.length)setOwnerView('add');pgOk=true;}catch(e){if(!silent)setNotice(e.message||'Listings are temporarily unavailable.');}
-  try{const b=await jsonFetch('/api/owner/rooms');setRooms(b.rooms||[]);roomOk=true;}catch(e){if(!silent&&!pgOk)setNotice(e.message||'Room data is temporarily unavailable.');}
+  try{
+   const a=await jsonFetch('/api/owner/pgs');const list=a.pgs||[];setOwnerPgs(list);cacheOwnerPart('pgs',list);setRoomForm(x=>({...x,pgId:x.pgId||list?.[0]?.id||''}));if(!list.length&&!ownerPgs.length&&!readOwnerSnapshot().pgs?.length)setOwnerView('add');pgOk=true;
+  }catch(e){
+   const cached=readOwnerSnapshot().pgs;if(Array.isArray(cached)&&cached.length){setOwnerPgs(cached);setRoomForm(x=>({...x,pgId:x.pgId||cached?.[0]?.id||''}));pgOk=true;}
+  }
+  try{
+   const b=await jsonFetch('/api/owner/rooms');const list=b.rooms||[];setRooms(list);cacheOwnerPart('rooms',list);roomOk=true;
+  }catch(e){const cached=readOwnerSnapshot().rooms;if(Array.isArray(cached)){setRooms(cached);roomOk=true;}}
   if(pgOk&&roomOk)ownerBaseLoaded.current=true;
   if(!silent)setLoading(false);
+  if((!pgOk||!roomOk)&&retry){setTimeout(()=>loadOwnerBase(true,true,false).catch(()=>{}),2500);}
  }
  async function loadOwnerViewData(view,force=false,silent=false){
   if(!owner)return;
@@ -153,9 +163,9 @@ export default function DashboardShell({user,role}){
   results.forEach((r,i)=>{
    if(r.status!=='fulfilled')return;
    const u=urls[i],v=r.value;
-   if(u==='/api/owner/bookings')setOwnerBookings(v.bookings||[]);
-   if(u==='/api/owner/payments')setOwnerPayments(v.payments||[]);
-   if(u==='/api/owner/refunds')setOwnerRefunds(v.refunds||[]);
+   if(u==='/api/owner/bookings'){const x=v.bookings||[];setOwnerBookings(x);cacheOwnerPart('bookings',x);}
+   if(u==='/api/owner/payments'){const x=v.payments||[];setOwnerPayments(x);cacheOwnerPart('payments',x);}
+   if(u==='/api/owner/refunds'){const x=v.refunds||[];setOwnerRefunds(x);cacheOwnerPart('refunds',x);}
    if(u==='/api/owner/payment-settings'){
     const ps=v.settings||null;setOwnerPaySettings(ps);
     setOwnerPayForm({upiName:'',upiId:'',bankName:'',accountHolder:'',accountNumber:'',ifsc:'',note:'',qr:null});
@@ -163,7 +173,7 @@ export default function DashboardShell({user,role}){
   });
   const failed=results.find(x=>x.status==='rejected');
   if(!failed)ownerViewLoaded.current.add(view);
-  else if(!silent&&(view==='bookings'||view==='payments'))setNotice(failed.reason?.message||'This section is temporarily unavailable. Please try again shortly.');
+  else if(!silent&&(view==='bookings'||view==='payments')){const snap=readOwnerSnapshot();if(view==='bookings'&&Array.isArray(snap.bookings))setOwnerBookings(snap.bookings);if(view==='payments'&&Array.isArray(snap.payments))setOwnerPayments(snap.payments);}
   if(!silent)setLoading(false);
  }
  async function refreshOwner(targetView=ownerView,silent=false){
@@ -173,7 +183,7 @@ export default function DashboardShell({user,role}){
   await loadOwnerViewData(targetView,true,silent);
  }
  const savedKey=`pg_saved_${String(user?.id||user?.sub||user?.username||'guest')}`;
- useEffect(()=>{try{setSaved(JSON.parse(localStorage.getItem(savedKey)||'[]'));}catch{setSaved([])} if(owner)loadOwnerBase();else loadCustomer();},[owner,savedKey]);
+ useEffect(()=>{try{setSaved(JSON.parse(localStorage.getItem(savedKey)||'[]'));}catch{setSaved([])} if(owner){const snap=readOwnerSnapshot();if(Array.isArray(snap.pgs))setOwnerPgs(snap.pgs);if(Array.isArray(snap.rooms))setRooms(snap.rooms);if(Array.isArray(snap.bookings))setOwnerBookings(snap.bookings);if(Array.isArray(snap.payments))setOwnerPayments(snap.payments);if(Array.isArray(snap.refunds))setOwnerRefunds(snap.refunds);loadOwnerBase();}else loadCustomer();},[owner,savedKey]);
  useEffect(()=>{if(!owner)return;setNotice('');loadOwnerViewData(ownerView);},[owner,ownerView]);
  useEffect(()=>{
   if(typeof window==='undefined')return;

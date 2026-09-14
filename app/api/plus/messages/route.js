@@ -1,60 +1,61 @@
 import { NextResponse } from 'next/server';
 import { readSession } from '../../../../lib/session';
+import { appendRow, readRows, patchRows } from '../../../../lib/plus-store';
 import { listCustomerBookings, listOwnerBookings } from '../../../../lib/bookings';
-import { readRows, appendRow, updateRow, updateRowsByIds } from '../../../../lib/plus-store';
+import { listAllPgs } from '../../../../lib/pgs';
 import { uploadBuffer } from '../../../../lib/drive';
 import { sendPushToUser } from '../../../../lib/push';
-
 const clean=v=>String(v??'').trim();
-const now=()=>new Date().toISOString();
-const id=()=>`MSG-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
-const allowedStatuses=new Set(['Accepted','Confirmed','Refund Pending','Refund Sent']);
-
-async function context(){
-  const u=await readSession();
-  if(!u||!['customer','owner'].includes(u.role))return null;
-  const bookings=u.role==='owner'?await listOwnerBookings(u.sub):await listCustomerBookings(u.sub);
-  return {u,bookings};
-}
-function bookingFor(c,bookingId){const b=c.bookings.find(x=>clean(x.id)===clean(bookingId));if(!b||!allowedStatuses.has(clean(b.status)))throw new Error('Chat is available only for an active accepted booking.');return b;}
-function otherUser(c,b){return c.u.role==='owner'?clean(b.customerId):clean(b.pg?.ownerId);}
+const chatStatuses=new Set(['Accepted','Confirmed','Refund Pending','Refund Sent']);
+async function allowedBookings(u){return u.role==='customer'?listCustomerBookings(u.sub):u.role==='owner'?listOwnerBookings(u.sub):[];}
+async function targetFor(u,bk){if(u.role==='owner')return clean(bk.customerId);const pgs=await listAllPgs(false);return clean(pgs.find(p=>p.id===bk.pgId)?.ownerId);}
+function info(bk){return{bookingId:bk.id,propertyName:bk.pg?.name||bk.pgId,checkIn:bk.checkIn,checkOut:bk.checkOut,status:bk.status,amount:bk.amount||bk.total||''};}
+function quotaFriendly(e){return /quota exceeded|resource_exhausted|read requests per minute/i.test(String(e?.message||e));}
 
 export async function GET(req){
  try{
-  const c=await context();if(!c)return NextResponse.json({ok:false,error:'Please login first.'},{status:401});
-  const url=new URL(req.url);const summary=url.searchParams.get('summary');const all=await readRows('Messages');
-  const bookingIds=new Set(c.bookings.filter(b=>allowedStatuses.has(clean(b.status))).map(b=>clean(b.id)));
-  const mine=all.filter(m=>bookingIds.has(clean(m.booking_id)));
-  const unread=mine.filter(m=>clean(m.sender_id)!==clean(c.u.sub)&&!clean(m.read_at)).length;
-  if(summary)return NextResponse.json({ok:true,unread});
-  const bookingId=clean(url.searchParams.get('bookingId'));bookingFor(c,bookingId);
-  let messages=mine.filter(m=>clean(m.booking_id)===bookingId).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
-  const t=now();const toRead=messages.filter(m=>clean(m.sender_id)!==clean(c.u.sub)&&!clean(m.read_at)).map(m=>({id:m.id,patch:{delivered_at:m.delivered_at||t,read_at:t}}));
-  if(toRead.length){await updateRowsByIds('Messages',toRead);messages=messages.map(m=>toRead.some(x=>x.id===m.id)?{...m,delivered_at:m.delivered_at||t,read_at:t}:m);}
-  const unreadAfter=mine.filter(m=>clean(m.booking_id)!==bookingId&&clean(m.sender_id)!==clean(c.u.sub)&&!clean(m.read_at)).length;
-  return NextResponse.json({ok:true,messages,unread:unreadAfter});
- }catch(e){console.error('MESSAGES_GET_ERROR',e);return NextResponse.json({ok:false,error:e.message},{status:400});}
+  const u=await readSession();if(!u)return NextResponse.json({ok:false,error:'Unauthorized'},{status:401});
+  const url=new URL(req.url),bid=clean(url.searchParams.get('bookingId'));
+  const allowed=await allowedBookings(u);const live=allowed.filter(x=>chatStatuses.has(x.status)),ids=new Set(live.map(x=>x.id));
+  const rows=await readRows('Messages');
+  if(url.searchParams.get('summary')==='1'){
+   const unread=rows.filter(x=>ids.has(x.booking_id)&&x.sender_id!==clean(u.sub)&&!x.read_at).length;
+   return NextResponse.json({ok:true,unreadCount:unread});
+  }
+  const bk=live.find(x=>x.id===bid);if(!bk)return NextResponse.json({ok:false,error:'Chat unavailable for this booking.'},{status:403});
+  const current=rows.filter(x=>x.booking_id===bid).sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));
+  const unreadMine=current.filter(x=>x.sender_id!==clean(u.sub)&&!x.read_at);
+  if(unreadMine.length){
+   const now=new Date().toISOString();
+   await patchRows('Messages',x=>x.booking_id===bid&&x.sender_id!==clean(u.sub)&&!x.read_at,{delivered_at:now,read_at:now});
+   unreadMine.forEach(x=>{x.delivered_at=now;x.read_at=now;});
+  }
+  const unread=rows.filter(x=>ids.has(x.booking_id)&&x.booking_id!==bid&&x.sender_id!==clean(u.sub)&&!x.read_at).length;
+  return NextResponse.json({ok:true,messages:current,booking:info(bk),unreadCount:unread});
+ }catch(e){
+  return NextResponse.json({ok:false,error:quotaFriendly(e)?'Chat is syncing. Please retry in a moment.':(e.message||'Chat could not load.')},{status:503});
+ }
 }
 
 export async function POST(req){
  try{
-  const c=await context();if(!c)return NextResponse.json({ok:false,error:'Please login first.'},{status:401});
-  const type=req.headers.get('content-type')||'';let bookingId='',message='',file=null;
-  if(type.includes('multipart/form-data')){const form=await req.formData();bookingId=clean(form.get('bookingId'));message=clean(form.get('message'));file=form.get('file');}
-  else{const body=await req.json();bookingId=clean(body.bookingId);message=clean(body.message);}
-  const booking=bookingFor(c,bookingId);if(!message&&(!file||typeof file.arrayBuffer!=='function'))throw new Error('Type a message or attach a file.');
-  if(message.length>1000)throw new Error('Message is too long.');
-  let attachment={attachment_file_id:'',attachment_name:'',attachment_type:''};
-  if(file&&typeof file.arrayBuffer==='function'&&Number(file.size||0)>0){
-    if(Number(file.size)>8*1024*1024)throw new Error('Attachment must be under 8 MB.');
-    const mime=clean(file.type)||'application/octet-stream';const allowed=mime.startsWith('image/')||['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.ms-excel','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','text/plain'].includes(mime);
-    if(!allowed)throw new Error('Only images, PDF, Word, Excel or text files are allowed.');
-    const up=await uploadBuffer({buffer:Buffer.from(await file.arrayBuffer()),mimeType:mime,name:file.name||`chat-${Date.now()}`,folderName:`Chat-${bookingId}`});
-    attachment={attachment_file_id:up.id,attachment_name:up.name||file.name||'Attachment',attachment_type:mime};
+  const u=await readSession();if(!u)return NextResponse.json({ok:false,error:'Unauthorized'},{status:401});
+  let bid='',msg='',file=null;const ct=req.headers.get('content-type')||'';
+  if(ct.includes('multipart/form-data')){const f=await req.formData();bid=clean(f.get('bookingId'));msg=clean(f.get('message'));file=f.get('file');}
+  else{const b=await req.json();bid=clean(b.bookingId);msg=clean(b.message);}
+  const allowed=await allowedBookings(u),bk=allowed.find(x=>x.id===bid&&chatStatuses.has(x.status));if(!bk)return NextResponse.json({ok:false,error:'Chat unavailable for this booking.'},{status:403});
+  if(msg.length>1000)throw new Error('Message must be under 1000 characters.');
+  let attachment={};
+  if(file&&typeof file.arrayBuffer==='function'&&file.size>0){
+   if(file.size>8*1024*1024)throw new Error('Attachment maximum size is 8 MB.');
+   const ok=/^image\//.test(file.type)||['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type);if(!ok)throw new Error('Only images, PDF, DOC and DOCX files are allowed.');
+   const safe=String(file.name||'attachment').replace(/[^a-zA-Z0-9._ -]/g,'_');
+   const up=await uploadBuffer({buffer:Buffer.from(await file.arrayBuffer()),mimeType:file.type,name:`${bid}-${Date.now()}-${safe}`,folderName:`StayFinder Chat - ${bid}`});attachment={attachment_id:up.id,attachment_name:safe,attachment_type:file.type};
   }
-  const item={id:id(),booking_id:bookingId,sender_id:clean(c.u.sub),sender_role:c.u.role,message,...attachment,delivered_at:'',read_at:'',created_at:now()};
-  await appendRow('Messages',item);
-  const target=otherUser(c,booking);if(target){try{const sent=await sendPushToUser(target,{title:'New StayFinder message',body:message||`Sent ${attachment.attachment_name||'an attachment'}`,url:c.u.role==='owner'?'/customer':'/owner',tag:`chat-${bookingId}`});if(sent?.sent>0){item.delivered_at=now();await updateRow('Messages',item.id,{delivered_at:item.delivered_at});}}catch(e){console.error('CHAT_PUSH_ERROR',e?.message||e);}}
-  return NextResponse.json({ok:true,message:item},{status:201});
- }catch(e){console.error('MESSAGES_POST_ERROR',e);return NextResponse.json({ok:false,error:e.message},{status:400});}
+  if(!msg&&!attachment.attachment_id)throw new Error('Type a message or attach a file.');
+  const row={id:`MSG-${Date.now().toString(36).toUpperCase()}`,booking_id:bid,sender_id:clean(u.sub),sender_role:u.role,message:msg,created_at:new Date().toISOString(),...attachment,delivered_at:'',read_at:''};
+  await appendRow('Messages',row);
+  const target=await targetFor(u,bk).catch(()=>null);if(target){const preview=msg||attachment.attachment_name||'Attachment';sendPushToUser(target,{title:`New message from ${u.role==='owner'?'Owner':'Customer'}`,body:preview.slice(0,120),url:u.role==='owner'?'/customer':'/owner',tag:`chat-${bid}`}).catch(()=>{});}
+  return NextResponse.json({ok:true,message:row},{status:201});
+ }catch(e){return NextResponse.json({ok:false,error:quotaFriendly(e)?'Message service is syncing. Please retry in a moment.':(e.message||'Message could not be sent.')},{status:400});}
 }
