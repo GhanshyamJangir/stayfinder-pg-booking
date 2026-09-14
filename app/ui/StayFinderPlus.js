@@ -12,8 +12,31 @@ export default function StayFinderPlus({user,role,bookings=[],pgs=[],rooms=[]}){
  const [chatBooking,setChatBooking]=useState(''),[messages,setMessages]=useState([]),[chatText,setChatText]=useState(''),[otp,setOtp]=useState({}),[docType,setDocType]=useState('Government ID'),[docFile,setDocFile]=useState(null);
  const confirmed=useMemo(()=>bookings.filter(b=>b.status==='Confirmed'),[bookings]);
  const chatBookings=useMemo(()=>bookings.filter(b=>['Accepted','Confirmed','Refund Pending','Refund Sent'].includes(b.status)),[bookings]);
- async function j(url,opts){const r=await fetch(url,{cache:'no-store',...opts});const d=await r.json();if(!r.ok||!d.ok)throw new Error(d.error||'Request failed.');return d;}
- async function load(){setErr('');const out=await Promise.allSettled([j('/api/plus/overview'),j('/api/plus/support'),j('/api/plus/reviews'),j('/api/plus/verification'),j('/api/plus/stay')]);if(out[0].status==='fulfilled')setData(out[0].value);if(out[1].status==='fulfilled')setTickets(out[1].value.tickets||[]);if(out[2].status==='fulfilled')setReviews(out[2].value.reviews||[]);if(out[3].status==='fulfilled')setVerification(out[3].value.items||[]);if(out[4].status==='fulfilled')setStay(out[4].value.items||[]);}
+ async function j(url,opts){
+  const r=await fetch(url,{cache:'no-store',...opts});
+  const type=r.headers.get('content-type')||'';
+  const text=await r.text();
+  let d=null;
+  if(type.includes('application/json')){try{d=text?JSON.parse(text):{};}catch{d=null;}}
+  if(!d){
+    if(r.status===404)return {ok:false,optionalMissing:true,error:'Feature API is not deployed yet.'};
+    throw new Error(`StayFinder service response invalid (${r.status}).`);
+  }
+  if(!r.ok||!d.ok)throw new Error(d.error||'Request failed.');
+  return d;
+}
+ async function load(){
+  setErr('');
+  const endpoints=['/api/plus/overview','/api/plus/support','/api/plus/reviews','/api/plus/verification','/api/plus/stay'];
+  const out=await Promise.allSettled(endpoints.map(x=>j(x)));
+  if(out[0].status==='fulfilled'&&!out[0].value.optionalMissing)setData(out[0].value);
+  if(out[1].status==='fulfilled'&&!out[1].value.optionalMissing)setTickets(out[1].value.tickets||[]);
+  if(out[2].status==='fulfilled'&&!out[2].value.optionalMissing)setReviews(out[2].value.reviews||[]);
+  if(out[3].status==='fulfilled'&&!out[3].value.optionalMissing)setVerification(out[3].value.items||[]);
+  if(out[4].status==='fulfilled'&&!out[4].value.optionalMissing)setStay(out[4].value.items||[]);
+  const critical=out[4];
+  if(critical.status==='rejected')setErr(critical.reason?.message||'Check-in service unavailable.');
+}
  useEffect(()=>{if(open)load().catch(e=>setErr(e.message));},[open]);
  useEffect(()=>{if(!open)return;const old=document.body.style.overflow;document.body.style.overflow='hidden';const esc=e=>e.key==='Escape'&&setOpen(false);window.addEventListener('keydown',esc);return()=>{document.body.style.overflow=old;window.removeEventListener('keydown',esc)}},[open]);
  async function submitTicket(e){e.preventDefault();setBusy(true);setErr('');try{const d=await j('/api/plus/support',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(ticketForm)});setTickets(x=>[d.ticket,...x]);setTicketForm({category:'Booking',bookingId:'',subject:'',message:'',priority:'Normal'});setTab('tickets');}catch(e){setErr(e.message)}finally{setBusy(false)}}
