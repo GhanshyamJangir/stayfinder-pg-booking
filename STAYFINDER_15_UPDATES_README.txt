@@ -54,7 +54,7 @@ SUPPORT BEHAVIOUR WITHOUT WATI
 - Raise Ticket: complete issue is saved and visible in Admin > Support Inbox.
 - Call Support: opens phone dialer and creates an interaction log first.
 - WhatsApp Support: opens WhatsApp to 8529812503 with ticket/booking context when available, and creates an interaction log first.
-- Email Support: opens email compose to Ghanshyamjangir334@gmail.com and creates an interaction log first.
+- Email Support: opens email compose to stayfinderjaipur@gmail.com and creates an interaction log first.
 - The system cannot read the actual WhatsApp conversation or actual call duration without a future WhatsApp Business/WATI/telephony integration.
 
 VALIDATION PERFORMED

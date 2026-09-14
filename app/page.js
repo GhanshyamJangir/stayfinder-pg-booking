@@ -122,7 +122,7 @@ export default function LoginPage() {
       try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(`Login service returned an invalid response (HTTP ${res.status}).`); }
       if (data?.code === 'ACCOUNT_DISABLED') {
         setDisabledAccount({
-          email: data.supportEmail || 'Ghanshyamjangir334@gmail.com',
+          email: data.supportEmail || 'stayfinderjaipur@gmail.com',
           message: data.error || 'Your account is disabled. Please contact the support team.'
         });
         setPassword('');

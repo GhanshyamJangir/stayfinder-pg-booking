@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { findUserByUsername, verifyUser } from '../../../../lib/users';
 import { createSession } from '../../../../lib/session';
 
-const SUPPORT_EMAIL = 'Ghanshyamjangir334@gmail.com';
+const SUPPORT_EMAIL = 'stayfinderjaipur@gmail.com';
 
 export async function POST(request) {
   try {

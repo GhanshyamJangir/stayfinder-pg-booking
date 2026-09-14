@@ -99,7 +99,7 @@ export default function TermsPage() {
 
           <h2 style={styles.h2}>12. Contact us</h2>
           <p>
-            Email: <a style={styles.link} href="mailto:Ghanshyamjangir334@gmail.com">Ghanshyamjangir334@gmail.com</a><br />
+            Email: <a style={styles.link} href="mailto:stayfinderjaipur@gmail.com">stayfinderjaipur@gmail.com</a><br />
             Support mobile / WhatsApp: <a style={styles.link} href="tel:+918529812503">+91 8529812503</a>
           </p>
         </section>
