@@ -6,56 +6,9 @@ import { listAllPgs } from '../../../../lib/pgs';
 import { uploadBuffer } from '../../../../lib/drive';
 import { sendPushToUser } from '../../../../lib/push';
 const clean=v=>String(v??'').trim();
-const chatStatuses=new Set(['Accepted','Confirmed','Refund Pending','Refund Sent']);
-async function allowedBookings(u){return u.role==='customer'?listCustomerBookings(u.sub):u.role==='owner'?listOwnerBookings(u.sub):[];}
+async function bookingContext(u,bid){const list=u.role==='customer'?await listCustomerBookings(u.sub):u.role==='owner'?await listOwnerBookings(u.sub):[];return list.find(x=>x.id===bid&&['Accepted','Confirmed','Refund Pending','Refund Sent'].includes(x.status));}
+async function allAllowed(u){return u.role==='customer'?listCustomerBookings(u.sub):u.role==='owner'?listOwnerBookings(u.sub):[];}
 async function targetFor(u,bk){if(u.role==='owner')return clean(bk.customerId);const pgs=await listAllPgs(false);return clean(pgs.find(p=>p.id===bk.pgId)?.ownerId);}
-function info(bk){return{bookingId:bk.id,propertyName:bk.pg?.name||bk.pgId,checkIn:bk.checkIn,checkOut:bk.checkOut,status:bk.status,amount:bk.amount||bk.total||''};}
-function quotaFriendly(e){return /quota exceeded|resource_exhausted|read requests per minute/i.test(String(e?.message||e));}
-
-export async function GET(req){
- try{
-  const u=await readSession();if(!u)return NextResponse.json({ok:false,error:'Unauthorized'},{status:401});
-  const url=new URL(req.url),bid=clean(url.searchParams.get('bookingId'));
-  const allowed=await allowedBookings(u);const live=allowed.filter(x=>chatStatuses.has(x.status)),ids=new Set(live.map(x=>x.id));
-  const rows=await readRows('Messages');
-  if(url.searchParams.get('summary')==='1'){
-   const unread=rows.filter(x=>ids.has(x.booking_id)&&x.sender_id!==clean(u.sub)&&!x.read_at).length;
-   return NextResponse.json({ok:true,unreadCount:unread});
-  }
-  const bk=live.find(x=>x.id===bid);if(!bk)return NextResponse.json({ok:false,error:'Chat unavailable for this booking.'},{status:403});
-  const current=rows.filter(x=>x.booking_id===bid).sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));
-  const unreadMine=current.filter(x=>x.sender_id!==clean(u.sub)&&!x.read_at);
-  if(unreadMine.length){
-   const now=new Date().toISOString();
-   await patchRows('Messages',x=>x.booking_id===bid&&x.sender_id!==clean(u.sub)&&!x.read_at,{delivered_at:now,read_at:now});
-   unreadMine.forEach(x=>{x.delivered_at=now;x.read_at=now;});
-  }
-  const unread=rows.filter(x=>ids.has(x.booking_id)&&x.booking_id!==bid&&x.sender_id!==clean(u.sub)&&!x.read_at).length;
-  return NextResponse.json({ok:true,messages:current,booking:info(bk),unreadCount:unread});
- }catch(e){
-  return NextResponse.json({ok:false,error:quotaFriendly(e)?'Chat is syncing. Please retry in a moment.':(e.message||'Chat could not load.')},{status:503});
- }
-}
-
-export async function POST(req){
- try{
-  const u=await readSession();if(!u)return NextResponse.json({ok:false,error:'Unauthorized'},{status:401});
-  let bid='',msg='',file=null;const ct=req.headers.get('content-type')||'';
-  if(ct.includes('multipart/form-data')){const f=await req.formData();bid=clean(f.get('bookingId'));msg=clean(f.get('message'));file=f.get('file');}
-  else{const b=await req.json();bid=clean(b.bookingId);msg=clean(b.message);}
-  const allowed=await allowedBookings(u),bk=allowed.find(x=>x.id===bid&&chatStatuses.has(x.status));if(!bk)return NextResponse.json({ok:false,error:'Chat unavailable for this booking.'},{status:403});
-  if(msg.length>1000)throw new Error('Message must be under 1000 characters.');
-  let attachment={};
-  if(file&&typeof file.arrayBuffer==='function'&&file.size>0){
-   if(file.size>8*1024*1024)throw new Error('Attachment maximum size is 8 MB.');
-   const ok=/^image\//.test(file.type)||['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type);if(!ok)throw new Error('Only images, PDF, DOC and DOCX files are allowed.');
-   const safe=String(file.name||'attachment').replace(/[^a-zA-Z0-9._ -]/g,'_');
-   const up=await uploadBuffer({buffer:Buffer.from(await file.arrayBuffer()),mimeType:file.type,name:`${bid}-${Date.now()}-${safe}`,folderName:`StayFinder Chat - ${bid}`});attachment={attachment_id:up.id,attachment_name:safe,attachment_type:file.type};
-  }
-  if(!msg&&!attachment.attachment_id)throw new Error('Type a message or attach a file.');
-  const row={id:`MSG-${Date.now().toString(36).toUpperCase()}`,booking_id:bid,sender_id:clean(u.sub),sender_role:u.role,message:msg,created_at:new Date().toISOString(),...attachment,delivered_at:'',read_at:''};
-  await appendRow('Messages',row);
-  const target=await targetFor(u,bk).catch(()=>null);if(target){const preview=msg||attachment.attachment_name||'Attachment';sendPushToUser(target,{title:`New message from ${u.role==='owner'?'Owner':'Customer'}`,body:preview.slice(0,120),url:u.role==='owner'?'/customer':'/owner',tag:`chat-${bid}`}).catch(()=>{});}
-  return NextResponse.json({ok:true,message:row},{status:201});
- }catch(e){return NextResponse.json({ok:false,error:quotaFriendly(e)?'Message service is syncing. Please retry in a moment.':(e.message||'Message could not be sent.')},{status:400});}
-}
+function info(bk){return {bookingId:bk.id,propertyName:bk.pg?.name||bk.pgId,checkIn:bk.checkIn,checkOut:bk.checkOut,status:bk.status};}
+export async function GET(req){try{const u=await readSession();if(!u)return NextResponse.json({ok:false,error:'Unauthorized'},{status:401});const url=new URL(req.url);const bid=clean(url.searchParams.get('bookingId'));const allowed=await allAllowed(u);const ids=new Set(allowed.filter(x=>['Accepted','Confirmed','Refund Pending','Refund Sent'].includes(x.status)).map(x=>x.id));if(url.searchParams.get('summary')==='1'){const rows=(await readRows('Messages')).filter(x=>ids.has(x.booking_id));const unread=rows.filter(x=>x.sender_id!==clean(u.sub)&&!x.read_at).length;return NextResponse.json({ok:true,unreadCount:unread});}const bk=allowed.find(x=>x.id===bid&&ids.has(x.id));if(!bk)return NextResponse.json({ok:false,error:'Chat unavailable for this booking.'},{status:403});const now=new Date().toISOString();await patchRows('Messages',x=>x.booking_id===bid&&x.sender_id!==clean(u.sub)&&!x.read_at,{delivered_at:now,read_at:now});const rows=(await readRows('Messages')).filter(x=>x.booking_id===bid).sort((a,b)=>Date.parse(a.created_at)-Date.parse(b.created_at));const unread=(await readRows('Messages')).filter(x=>ids.has(x.booking_id)&&x.sender_id!==clean(u.sub)&&!x.read_at).length;return NextResponse.json({ok:true,messages:rows,booking:info(bk),unreadCount:unread});}catch(e){return NextResponse.json({ok:false,error:e.message},{status:500});}}
+export async function POST(req){try{const u=await readSession();if(!u)return NextResponse.json({ok:false,error:'Unauthorized'},{status:401});let bid='',msg='',file=null;const ct=req.headers.get('content-type')||'';if(ct.includes('multipart/form-data')){const f=await req.formData();bid=clean(f.get('bookingId'));msg=clean(f.get('message'));file=f.get('file');}else{const b=await req.json();bid=clean(b.bookingId);msg=clean(b.message);}const bk=await bookingContext(u,bid);if(!bk)return NextResponse.json({ok:false,error:'Chat unavailable for this booking.'},{status:403});if(msg.length>1000)throw new Error('Message must be under 1000 characters.');let attachment={};if(file&&typeof file.arrayBuffer==='function'&&file.size>0){if(file.size>8*1024*1024)throw new Error('Attachment maximum size is 8 MB.');const ok=/^image\//.test(file.type)||['application/pdf','application/msword','application/vnd.openxmlformats-officedocument.wordprocessingml.document'].includes(file.type);if(!ok)throw new Error('Only images, PDF, DOC and DOCX files are allowed.');const safe=String(file.name||'attachment').replace(/[^a-zA-Z0-9._ -]/g,'_');const up=await uploadBuffer({buffer:Buffer.from(await file.arrayBuffer()),mimeType:file.type,name:`${bid}-${Date.now()}-${safe}`,folderName:`StayFinder Chat - ${bid}`});attachment={attachment_id:up.id,attachment_name:safe,attachment_type:file.type};}if(!msg&&!attachment.attachment_id)throw new Error('Type a message or attach a file.');const row={id:`MSG-${Date.now().toString(36).toUpperCase()}`,booking_id:bid,sender_id:clean(u.sub),sender_role:u.role,message:msg,created_at:new Date().toISOString(),...attachment,delivered_at:'',read_at:''};await appendRow('Messages',row);const target=await targetFor(u,bk);if(target){const preview=msg||attachment.attachment_name||'Attachment';await sendPushToUser(target,{title:`New message from ${u.role==='owner'?'Owner':'Customer'}`,body:preview.slice(0,120),url:u.role==='owner'?'/customer':'/owner',tag:`chat-${bid}`}).catch(()=>{});}return NextResponse.json({ok:true,message:row},{status:201});}catch(e){return NextResponse.json({ok:false,error:e.message},{status:400});}}
