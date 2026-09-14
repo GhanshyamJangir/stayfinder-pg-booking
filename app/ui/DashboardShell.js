@@ -285,6 +285,19 @@ function MobileResponsiveStyles(){return <style jsx global>{`
 .mobileBottomNav,.hostMobileNav,.hostMobileLogout{display:none}
 .airbnbMobileExploreHead,.airbnbSearchSheetBackdrop{display:none}
 .compactSearchGrid{display:contents}.budgetField{min-width:130px}
+@media(min-width:821px){
+ .hostApp{display:block!important;min-height:100vh!important;overflow-x:hidden!important}
+ .hostSidebar{position:fixed!important;left:0!important;top:0!important;bottom:0!important;width:245px!important;box-sizing:border-box!important;z-index:60!important;overflow-y:auto!important}
+ .hostMain{margin-left:245px!important;width:calc(100% - 245px)!important;min-width:0!important;box-sizing:border-box!important;overflow-x:hidden!important}
+ .hostTopbar{margin:0!important;width:100%!important;box-sizing:border-box!important;padding-left:30px!important;padding-right:30px!important}
+ .hostTopbar>div:first-child{min-width:0!important;max-width:60%!important;overflow:hidden!important}
+ .hostTopbar .eyebrow{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+ .hostTopbar h2{white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;max-width:100%!important}
+ .hostBrand{width:100%!important;box-sizing:border-box!important;overflow:hidden!important}
+ .hostBrand img{display:block!important;max-width:172px!important;width:100%!important;height:auto!important}
+ .hostBrand>small{display:none!important}
+ .ownerWorkspace,.hostWelcome,.hostStats,.hostTwoCol{max-width:100%!important;box-sizing:border-box!important}
+}
 @media(max-width:820px){
  html,body{max-width:100%;overflow-x:hidden}
  body{padding-bottom:0!important}

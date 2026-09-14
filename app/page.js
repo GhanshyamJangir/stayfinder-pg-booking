@@ -30,10 +30,12 @@ export default function LoginPage() {
     const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true;
     setIsStandalone(Boolean(standalone));
 
-    if (!document.querySelector('link[rel="manifest"]')) {
+    const existingManifest = document.querySelector('link[rel="manifest"]');
+    if (existingManifest) existingManifest.href = '/manifest-v3.webmanifest?v=3';
+    else {
       const manifest = document.createElement('link');
       manifest.rel = 'manifest';
-      manifest.href = '/manifest.webmanifest';
+      manifest.href = '/manifest-v3.webmanifest?v=3';
       document.head.appendChild(manifest);
     }
     if (!document.querySelector('meta[name="theme-color"]')) {
@@ -51,12 +53,12 @@ export default function LoginPage() {
     if (!document.querySelector('link[rel="apple-touch-icon"]')) {
       const appleIcon = document.createElement('link');
       appleIcon.rel = 'apple-touch-icon';
-      appleIcon.href = '/icons/stayfinder-192-v2.png';
+      appleIcon.href = '/icons/stayfinder-192-v3.png?v=3';
       document.head.appendChild(appleIcon);
     }
 
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
+      navigator.serviceWorker.register('/sw.js',{scope:'/'}).then(reg=>reg.update()).catch(() => {});
     }
 
     const onBeforeInstall = (event) => {
@@ -243,7 +245,7 @@ export default function LoginPage() {
             <h3>Install StayFinder</h3>
             <p><b>Android / Chrome:</b> Open the browser menu and tap <b>Install app</b> or <b>Add to Home screen</b>.</p>
             <p><b>iPhone / Safari:</b> Tap <b>Share</b> and then <b>Add to Home Screen</b>.</p>
-            <button className="primaryBtn" type="button" onClick={() => setShowInstallHelp(false)}>Got it</button>
+            <button className="primaryBtn" type="button" onClick={() => { setShowInstallHelp(false); window.alert('Chrome menu (⋮) → Install app / Add to Home screen. If an old StayFinder is already installed, uninstall it first, then install again.'); }}>Close</button>
           </div>
         </div>
       )}
