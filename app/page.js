@@ -25,6 +25,7 @@ export default function LoginPage() {
   const [installPrompt, setInstallPrompt] = useState(null);
   const [showInstallHelp, setShowInstallHelp] = useState(false);
   const [isStandalone, setIsStandalone] = useState(false);
+  const [disabledAccount, setDisabledAccount] = useState(null);
 
   useEffect(() => {
     const standalone = window.matchMedia?.('(display-mode: standalone)')?.matches || window.navigator.standalone === true;
@@ -119,6 +120,15 @@ export default function LoginPage() {
       const text = await res.text();
       let data = {};
       try { data = text ? JSON.parse(text) : {}; } catch { throw new Error(`Login service returned an invalid response (HTTP ${res.status}).`); }
+      if (data?.code === 'ACCOUNT_DISABLED') {
+        setDisabledAccount({
+          email: data.supportEmail || 'Ghanshyamjangir334@gmail.com',
+          message: data.error || 'Your account is disabled. Please contact the support team.'
+        });
+        setPassword('');
+        setLoading(false);
+        return;
+      }
       if (!res.ok || !data?.user) throw new Error(data.error || 'Login failed. Please check your username and password.');
       const target = data.user.role === 'admin' ? '/admin' : data.user.role === 'owner' ? '/owner' : '/customer';
       // Full navigation is more reliable on mobile/LAN because it reloads with the new session cookie.
@@ -237,6 +247,22 @@ export default function LoginPage() {
           </form>
         )}
       </section>
+      {disabledAccount && (
+        <div className="disabledAccountBackdrop" role="dialog" aria-modal="true" aria-label="Account disabled" onClick={() => setDisabledAccount(null)}>
+          <div className="disabledAccountCard" onClick={e => e.stopPropagation()}>
+            <button className="disabledAccountClose" type="button" onClick={() => setDisabledAccount(null)} aria-label="Close">×</button>
+            <div className="disabledAccountIcon">!</div>
+            <h3>Account disabled</h3>
+            <p>{disabledAccount.message}</p>
+            <div className="disabledSupportBox">
+              <span>Support email</span>
+              <b>{disabledAccount.email}</b>
+            </div>
+            <a className="disabledEmailBtn" href={`mailto:${disabledAccount.email}?subject=StayFinder%20Account%20Disabled%20Support&body=Hello%20StayFinder%20Support%2C%0A%0AMy%20account%20is%20disabled.%20Please%20help%20me%20restore%20access.%0A%0AUsername%3A%20${encodeURIComponent(username.trim())}`}>Email support</a>
+            <button className="disabledSecondaryBtn" type="button" onClick={() => setDisabledAccount(null)}>Close</button>
+          </div>
+        </div>
+      )}
       {showInstallHelp && (
         <div className="installHelpBackdrop" role="dialog" aria-modal="true" aria-label="Install StayFinder" onClick={() => setShowInstallHelp(false)}>
           <div className="installHelpCard" onClick={e => e.stopPropagation()}>
@@ -250,6 +276,18 @@ export default function LoginPage() {
         </div>
       )}
       <style jsx global>{`
+        .disabledAccountBackdrop { position:fixed; inset:0; z-index:10050; background:rgba(8,32,31,.58); display:flex; align-items:center; justify-content:center; padding:20px; backdrop-filter:blur(5px); }
+        .disabledAccountCard { width:min(100%,420px); position:relative; background:#fff; border-radius:24px; padding:28px 24px 22px; box-shadow:0 24px 80px rgba(0,0,0,.28); text-align:center; color:#123b39; }
+        .disabledAccountClose { position:absolute; right:14px; top:12px; border:0; background:#edf5f4; width:38px; height:38px; border-radius:50%; font-size:24px; cursor:pointer; color:#234f4c; }
+        .disabledAccountIcon { width:58px; height:58px; margin:0 auto 12px; border-radius:50%; display:grid; place-items:center; background:#fff0ef; color:#b2463f; font-size:28px; font-weight:900; }
+        .disabledAccountCard h3 { margin:0 0 8px; font-size:23px; }
+        .disabledAccountCard p { margin:0 auto 16px; color:#5d7471; line-height:1.5; max-width:330px; }
+        .disabledSupportBox { background:#f3f8f7; border:1px solid #dfeae8; border-radius:14px; padding:11px 12px; margin:0 0 12px; text-align:left; }
+        .disabledSupportBox span,.disabledSupportBox b { display:block; }
+        .disabledSupportBox span { font-size:11px; color:#718582; margin-bottom:3px; }
+        .disabledSupportBox b { font-size:13px; word-break:break-all; color:#163f3c; }
+        .disabledEmailBtn { min-height:48px; display:flex; align-items:center; justify-content:center; border-radius:13px; background:#1f665f; color:#fff; text-decoration:none; font-weight:900; margin-bottom:8px; }
+        .disabledSecondaryBtn { width:100%; min-height:44px; border:1px solid #d7e3e1; background:#fff; color:#234f4c; border-radius:12px; font-weight:800; cursor:pointer; }
         .forgotLink { border:0; background:transparent; color:#24615e; font-weight:800; padding:6px 0 12px; text-align:right; cursor:pointer; align-self:flex-end; }
         .successBox { border:1px solid #bfe2d8; background:#effaf6; color:#1c6253; border-radius:10px; padding:11px 12px; font-size:13px; line-height:1.45; }
         .installAppBtn { position: fixed; top: 18px; right: 18px; z-index: 80; border: 1px solid rgba(22,83,80,.18); background: #ffffff; color: #174f4d; border-radius: 999px; min-height: 44px; padding: 0 16px; font-weight: 800; box-shadow: 0 10px 30px rgba(18,70,68,.12); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
-import { verifyUser } from '../../../../lib/users';
+import { findUserByUsername, verifyUser } from '../../../../lib/users';
 import { createSession } from '../../../../lib/session';
+
+const SUPPORT_EMAIL = 'Ghanshyamjangir334@gmail.com';
 
 export async function POST(request) {
   try {
@@ -12,6 +14,20 @@ export async function POST(request) {
       return NextResponse.json(
         { ok: false, error: 'Username aur password required hai.' },
         { status: 400 }
+      );
+    }
+
+    // Check account state separately so a disabled account does not look like a wrong password.
+    const account = await findUserByUsername(username);
+    if (account && account.active === false) {
+      return NextResponse.json(
+        {
+          ok: false,
+          code: 'ACCOUNT_DISABLED',
+          error: 'Your account is disabled. Please contact the support team.',
+          supportEmail: SUPPORT_EMAIL,
+        },
+        { status: 403 }
       );
     }
 
