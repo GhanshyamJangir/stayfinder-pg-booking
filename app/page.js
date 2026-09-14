@@ -204,16 +204,16 @@ export default function LoginPage() {
         {!isStandalone && <button className="installAppBtn" type="button" onClick={installApp} aria-label="Install StayFinder app"><span aria-hidden="true">↓</span> Install App</button>}
         {mode === 'login' ? (
           <form className="loginCard" onSubmit={login}>
-            <div className="mobileBrand">StayFinder</div><p className="eyebrow">WELCOME BACK</p><h2>Login to your account</h2>
+            <div className="mobileBrand">StayFinder</div><h2>Login</h2>
             <label>Username</label><input value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" autoComplete="username" />
             <label>Password</label><div className="passwordField"><input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" autoComplete="current-password" /><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} style={{touchAction:'manipulation',pointerEvents:'auto'}} onClick={() => setShowPassword(v => !v)}>{showPassword ? 'Hide' : 'Show'}</button></div>
             <button className="forgotLink" type="button" onClick={openForgot}>Forgot password?</button>
             {message && <div className="successBox">{message}</div>}{error && <div className="errorBox">{error}</div>}<button className="primaryBtn" type="submit" disabled={loading}>{loading ? 'Signing in…' : 'Login'}</button>
-            <div className="firstVisitBox" style={{textAlign:'center',alignItems:'center',justifyContent:'center'}}><b>New to StayFinder?</b><button type="button" onClick={() => { setMode('register'); setError(''); }}>Create an account</button></div>
+            <div className="firstVisitBox" style={{textAlign:'center',alignItems:'center',justifyContent:'center'}}><button type="button" onClick={() => { setMode('register'); setError(''); }}>Create account</button></div>
           </form>
         ) : mode === 'register' ? (
           <form className="loginCard registerCard" onSubmit={createAccount}>
-            <div className="mobileBrand">StayFinder</div><p className="eyebrow" style={{textAlign:'center'}}>NEW ACCOUNT</p><h2>Join StayFinder</h2><p className="muted">Join as a Customer to book a stay or as an Owner to list a PG or single room.</p>
+            <div className="mobileBrand">StayFinder</div><h2>Create account</h2><p className="muted">Choose Customer or Owner.</p>
             <div className="rolePicker"><button type="button" className={register.role === 'customer' ? 'active' : ''} onClick={() => setRegister({ ...register, role: 'customer' })}>Customer</button><button type="button" className={register.role === 'owner' ? 'active' : ''} onClick={() => setRegister({ ...register, role: 'owner' })}>Owner</button></div>
             <label>Full name</label><input required value={register.name} onChange={e => setRegister({ ...register, name: e.target.value })} placeholder="Your full name" />
             <label>Mobile number</label><input required inputMode="numeric" maxLength={10} value={register.mobile} onChange={e => setRegister({ ...register, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })} placeholder="10 digit mobile" />
@@ -263,9 +263,12 @@ export default function LoginPage() {
           .loginShell { min-height: 100dvh !important; display: block !important; background: #f5f9f8 !important; }
           .brandPanel { display: none !important; }
           .loginCardWrap { min-height: 100dvh !important; width: 100% !important; padding: 20px 14px calc(24px + env(safe-area-inset-bottom)) !important; display: flex !important; align-items: center !important; justify-content: center !important; }
-          .loginCard { width: min(100%, 430px) !important; max-width: 430px !important; padding: 24px 18px !important; margin: 0 auto !important; border-radius: 22px !important; box-sizing: border-box !important; }
+          .loginCard { width: min(100%, 430px) !important; max-width: 430px !important; padding: 20px 16px !important; margin: 0 auto !important; border-radius: 22px !important; box-sizing: border-box !important; }
           .registerCard { margin-top: max(0px, env(safe-area-inset-top)) !important; }
-          .mobileBrand { display: block !important; font-weight: 900 !important; font-size: 20px !important; margin-bottom: 18px !important; }
+          .mobileBrand { display: block !important; font-weight: 900 !important; font-size: 18px !important; margin-bottom: 12px !important; }
+          .loginCard h2 { font-size: 24px !important; margin: 0 0 14px !important; }
+          .loginCard .muted { font-size: 12px !important; margin: -4px 0 12px !important; }
+          .loginCard label { font-size: 11px !important; }
           .loginCard input { width: 100% !important; min-height: 50px !important; font-size: 16px !important; box-sizing: border-box !important; }
           .passwordField { width: 100% !important; position: relative !important; }
           .passwordField input { padding-right: 72px !important; }
