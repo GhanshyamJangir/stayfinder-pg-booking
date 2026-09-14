@@ -1,18 +1,30 @@
 {
   "name": "StayFinder",
   "short_name": "StayFinder",
-  "description": "Find the right stay. Book with confidence.",
+  "description": "Find and book PGs and rooms with StayFinder.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#f5f9f8",
   "theme_color": "#2f6966",
-  "orientation": "portrait-primary",
-  "categories": ["travel", "lifestyle"],
   "icons": [
-    { "src": "/icons/stayfinder-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/stayfinder-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/icons/stayfinder-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "/icons/stayfinder-192-v2.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/stayfinder-512-v2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/stayfinder-512-v2.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }

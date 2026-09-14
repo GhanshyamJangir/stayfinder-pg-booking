@@ -51,7 +51,7 @@ export default function LoginPage() {
     if (!document.querySelector('link[rel="apple-touch-icon"]')) {
       const appleIcon = document.createElement('link');
       appleIcon.rel = 'apple-touch-icon';
-      appleIcon.href = '/icons/stayfinder-192.png';
+      appleIcon.href = '/icons/stayfinder-192-v2.png';
       document.head.appendChild(appleIcon);
     }
 
@@ -196,15 +196,15 @@ export default function LoginPage() {
   return (
     <main className="loginShell">
       <section className="brandPanel">
-        <div className="brandMark"><img src="/stayfinder-icon.svg" alt="StayFinder" style={{width:'100%',height:'100%',objectFit:'contain'}}/></div>
-        <div><p className="eyebrow">SMART STAY</p><h1>StayFinder</h1><p className="brandText">Find the right stay. Book with confidence.</p></div>
+        <div className="brandLogoFull"><img src="/stayfinder-logo.svg" alt="StayFinder" /></div>
+        <div><p className="eyebrow">SMART STAY</p><p className="brandText">Find the right stay. Book with confidence.</p></div>
         <div className="featureStrip"><span>✓ Customer & Owner access</span><span>✓ Verified payments</span><span>✓ Google Drive storage</span></div>
       </section>
       <section className="loginCardWrap">
         {!isStandalone && <button className="installAppBtn" type="button" onClick={installApp} aria-label="Install StayFinder app"><span aria-hidden="true">↓</span> Install App</button>}
         {mode === 'login' ? (
           <form className="loginCard" onSubmit={login}>
-            <div className="mobileBrand">StayFinder</div><p className="eyebrow">WELCOME BACK</p><h2>Login to your account</h2>
+            <div className="mobileBrand"><img src="/stayfinder-logo.svg" alt="StayFinder" /></div><p className="eyebrow">WELCOME BACK</p><h2>Login to your account</h2>
             <label>Username</label><input value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" autoComplete="username" />
             <label>Password</label><div className="passwordField"><input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" autoComplete="current-password" /><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} style={{touchAction:'manipulation',pointerEvents:'auto'}} onClick={() => setShowPassword(v => !v)}>{showPassword ? 'Hide' : 'Show'}</button></div>
             <button className="forgotLink" type="button" onClick={openForgot}>Forgot password?</button>
@@ -213,7 +213,7 @@ export default function LoginPage() {
           </form>
         ) : mode === 'register' ? (
           <form className="loginCard registerCard" onSubmit={createAccount}>
-            <div className="mobileBrand">StayFinder</div><p className="eyebrow" style={{textAlign:'center'}}>NEW ACCOUNT</p><h2>Join StayFinder</h2><p className="muted">Join as a Customer to book a stay or as an Owner to list a PG or single room.</p>
+            <div className="mobileBrand"><img src="/stayfinder-logo.svg" alt="StayFinder" /></div><p className="eyebrow" style={{textAlign:'center'}}>NEW ACCOUNT</p><h2>Join StayFinder</h2><p className="muted">Join as a Customer to book a stay or as an Owner to list a PG or single room.</p>
             <div className="rolePicker"><button type="button" className={register.role === 'customer' ? 'active' : ''} onClick={() => setRegister({ ...register, role: 'customer' })}>Customer</button><button type="button" className={register.role === 'owner' ? 'active' : ''} onClick={() => setRegister({ ...register, role: 'owner' })}>Owner</button></div>
             <label>Full name</label><input required value={register.name} onChange={e => setRegister({ ...register, name: e.target.value })} placeholder="Your full name" />
             <label>Mobile number</label><input required inputMode="numeric" maxLength={10} value={register.mobile} onChange={e => setRegister({ ...register, mobile: e.target.value.replace(/\D/g, '').slice(0, 10) })} placeholder="10 digit mobile" />
@@ -225,7 +225,7 @@ export default function LoginPage() {
           </form>
         ) : (
           <form className="loginCard registerCard" onSubmit={forgotStep==='request'?requestOtp:forgotStep==='verify'?verifyOtp:resetForgotPassword}>
-            <div className="mobileBrand">StayFinder</div><p className="eyebrow" style={{textAlign:'center'}}>ACCOUNT RECOVERY</p><h2>{forgotStep==='request'?'Forgot password':forgotStep==='verify'?'Verify OTP':'Create new password'}</h2>
+            <div className="mobileBrand"><img src="/stayfinder-logo.svg" alt="StayFinder" /></div><p className="eyebrow" style={{textAlign:'center'}}>ACCOUNT RECOVERY</p><h2>{forgotStep==='request'?'Forgot password':forgotStep==='verify'?'Verify OTP':'Create new password'}</h2>
             {forgotStep==='request' && <><p className="muted">Enter your registered email or username. We will send a 6 digit OTP to the registered email.</p><label>Email or username</label><input required value={forgotIdentifier} onChange={e=>setForgotIdentifier(e.target.value)} placeholder="Registered email or username" autoComplete="username" /></>}
             {forgotStep==='verify' && <><p className="muted">Enter the OTP sent to your registered email. It is valid for 10 minutes.</p><label>6 digit OTP</label><input required inputMode="numeric" maxLength={6} value={forgotOtp} onChange={e=>setForgotOtp(e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="000000" autoComplete="one-time-code" /><button className="forgotLink" type="button" onClick={requestOtp}>Resend OTP</button></>}
             {forgotStep==='reset' && <><p className="muted">OTP verified. Enter and confirm your new password.</p><label>New password</label><div className="passwordField"><input required minLength={6} type={showNewPassword?'text':'password'} value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="Minimum 6 characters" autoComplete="new-password"/><button type="button" onClick={()=>setShowNewPassword(v=>!v)}>{showNewPassword?'Hide':'Show'}</button></div><label>Re-enter new password</label><div className="passwordField"><input required minLength={6} type={showConfirmPassword?'text':'password'} value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Re-enter new password" autoComplete="new-password"/><button type="button" onClick={()=>setShowConfirmPassword(v=>!v)}>{showConfirmPassword?'Hide':'Show'}</button></div></>}
@@ -258,6 +258,10 @@ export default function LoginPage() {
         .installHelpCard p { margin: 10px 0; line-height: 1.55; color: #526967; }
         .installHelpClose { position: absolute; right: 14px; top: 12px; border: 0; background: #edf5f4; width: 38px; height: 38px; border-radius: 50%; font-size: 24px; cursor: pointer; }
         .installHelpIcon { width: 58px; height: 58px; border-radius: 16px; background: linear-gradient(135deg,#2f6966,#73aaa6); display: grid; place-items: center; color: #fff; font-size: 20px; font-weight: 900; }
+        .brandLogoFull { width: min(360px, 88%); margin-bottom: 10px; }
+        .brandLogoFull img { width: 100%; height: auto; display: block; }
+        .mobileBrand { display:none; }
+        .mobileBrand img { display:block; width: 210px; max-width: 78%; height:auto; margin: 0 auto; }
         @media (max-width: 760px) {
           html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
           .loginShell { min-height: 100dvh !important; display: block !important; background: #f5f9f8 !important; }
@@ -265,7 +269,8 @@ export default function LoginPage() {
           .loginCardWrap { min-height: 100dvh !important; width: 100% !important; padding: 20px 14px calc(24px + env(safe-area-inset-bottom)) !important; display: flex !important; align-items: center !important; justify-content: center !important; }
           .loginCard { width: min(100%, 430px) !important; max-width: 430px !important; padding: 24px 18px !important; margin: 0 auto !important; border-radius: 22px !important; box-sizing: border-box !important; }
           .registerCard { margin-top: max(0px, env(safe-area-inset-top)) !important; }
-          .mobileBrand { display: block !important; font-weight: 900 !important; font-size: 20px !important; margin-bottom: 18px !important; }
+          .mobileBrand { display: flex !important; align-items: center !important; justify-content: center !important; margin-bottom: 18px !important; min-height: 58px !important; }
+          .mobileBrand img { width: 210px !important; max-width: 80% !important; height: auto !important; display: block !important; }
           .loginCard input { width: 100% !important; min-height: 50px !important; font-size: 16px !important; box-sizing: border-box !important; }
           .passwordField { width: 100% !important; position: relative !important; }
           .passwordField input { padding-right: 72px !important; }
