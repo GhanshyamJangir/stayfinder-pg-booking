@@ -34,7 +34,7 @@ export async function POST(request) {
     const user = await verifyUser(username, password);
     if (!user) {
       return NextResponse.json(
-        { ok: false, error: 'Username ya password galat hai.' },
+        { ok: false, error: 'Incorrect username or password.' },
         { status: 401 }
       );
     }
