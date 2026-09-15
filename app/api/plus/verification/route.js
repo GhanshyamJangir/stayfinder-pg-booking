@@ -19,7 +19,8 @@ export async function POST(req){
   if(activeExisting.length&&!replace)throw new Error(`${docType} is already submitted.`);
   if(docType==='Aadhaar Back'&&!existing.some(x=>x.doc_type==='Aadhaar Front'&&x.status!=='Rejected'))throw new Error('Upload Aadhaar Front first.');
   const safeName=String(file.name||`document-${Date.now()}`).replace(/[^a-zA-Z0-9._ -]/g,'_');
-  const uploaded=await uploadBuffer({buffer:Buffer.from(await file.arrayBuffer()),mimeType:file.type||'application/octet-stream',name:safeName,folderName:`Verification-${u.sub}`});
+  const userFolder=String(u.name||u.username||u.sub||'User').trim();
+  const uploaded=await uploadBuffer({buffer:Buffer.from(await file.arrayBuffer()),mimeType:file.type||'application/octet-stream',name:safeName,folderPath:['Verification',userFolder]});
   const item=await submitVerification(u,{docType,fileId:uploaded.id,fileName:uploaded.name});
   if(replace){for(const old of activeExisting){try{await reviewVerification(u.sub,old.id,'Rejected','Replaced by user with a newer image.');}catch{}}}
   return NextResponse.json({ok:true,item},{status:201});
