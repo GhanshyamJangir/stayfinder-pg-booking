@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
 const fmt=d=>{try{return new Date(d).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})}catch{return d||''}};
-const NAV=[['overview','Home','⌂'],['support','Support','!'],['bookings','Bookings','B'],['payments','Money','₹'],['users','Users','U'],['properties','Listings','P'],['trust','Trust & Risk','✓'],['reviews','Reviews','★'],['activity','Activity','A']];
-const MORE=['users','properties','trust','reviews','activity'];
+const NAV=[['overview','Home','⌂'],['support','Support','!'],['bookings','Bookings','B'],['payments','Money','₹'],['verification','Verification','✓'],['users','Users','U'],['properties','Listings','P'],['trust','Trust & Risk','✓'],['reviews','Reviews','★'],['activity','Activity','A']];
+const MORE=['verification','users','properties','trust','reviews','activity'];
 
 export default function AdminControlCenter({user}){
  const [data,setData]=useState(null),[control,setControl]=useState(null),[view,setView]=useState('overview'),[error,setError]=useState(''),[loading,setLoading]=useState(true),[filter,setFilter]=useState('All'),[note,setNote]=useState({}),[ticketPage,setTicketPage]=useState(1),[moreOpen,setMoreOpen]=useState(false);
@@ -52,6 +52,7 @@ export default function AdminControlCenter({user}){
     {loading&&!data?<div className="adminLoading">Loading...</div>:<div className="workspace">
       {view==='overview'&&<Overview data={data} choose={choose}/>} 
       {view==='support'&&<section className="supportView"><div className="sectionBar"><div><h2>Support Inbox</h2><small>{tickets.length} tickets</small></div><select value={filter} onChange={e=>setFilter(e.target.value)}><option>All</option><option>Open</option><option>In Progress</option><option>Waiting for User</option><option>Resolved</option></select></div><div className="ticketStack">{visibleTickets.map(t=><article key={t.id} className="ticketCard"><div className="ticketTop"><b>{t.id}</b><span>{t.status}</span></div><h3>{t.subject||t.category}</h3><p>{t.message}</p><div className="ticketMeta"><span>{t.role}</span><span>User {t.user_id}</span>{t.booking_id&&<span>{t.booking_id}</span>}<span>{t.priority}</span><span>{fmt(t.created_at)}</span></div><textarea rows="2" placeholder="Admin note / resolution" value={note[t.id]??t.admin_note??''} onChange={e=>setNote({...note,[t.id]:e.target.value})}/><div className="ticketActions"><button onClick={()=>updateTicket(t,'In Progress')}>In progress</button><button onClick={()=>updateTicket(t,'Waiting for User')}>Waiting</button><button className="resolve" onClick={()=>updateTicket(t,'Resolved')}>Resolve</button></div></article>)}</div><Pager page={ticketPage} pages={ticketPages} setPage={setTicketPage}/><details className="interactionPanel"><summary>Contact attempts <b>{data?.interactions?.length||0}</b></summary><CompactList cols={['Time','User','Channel','Ticket']} rows={data?.interactions?.map(x=>[fmt(x.created_at),x.user_id,x.channel,x.ticket_id||'-'])} pageSize={4}/></details></section>}
+      {view==='verification'&&<VerificationQueue users={data?.users||[]} verification={control?.verification||[]} act={adminAction}/>}
       {view==='users'&&<UserControl users={data?.users||[]} verification={control?.verification||[]} act={adminAction}/>} 
       {view==='properties'&&<PropertyControl pgs={data?.pgs||[]} moderation={control?.moderation||[]} act={adminAction}/>} 
       {view==='trust'&&<TrustRisk control={control} pgs={data?.pgs||[]} act={adminAction}/>} 
@@ -84,6 +85,13 @@ function Overview({data,choose}){
  </>
 }
 
+
+function VerificationQueue({users,verification,act}){
+ const [filter,setFilter]=useState('Pending'),[q,setQ]=useState('');
+ const userMap=useMemo(()=>Object.fromEntries(users.map(u=>[String(u.id),u])),[users]);
+ const rows=useMemo(()=>verification.slice().sort((a,b)=>{const ap=a.status==='Pending'?0:1,bp=b.status==='Pending'?0:1;return ap-bp||String(b.created_at||'').localeCompare(String(a.created_at||''))}).filter(x=>{const u=userMap[String(x.user_id)]||{};const text=`${x.user_id||''} ${u.name||''} ${u.username||''} ${u.email||''} ${x.doc_type||''} ${x.role||''}`.toLowerCase();return (filter==='All'||x.status===filter)&&(!q.trim()||text.includes(q.trim().toLowerCase()));}),[verification,userMap,filter,q]);
+ return <section className="supportView"><div className="sectionBar"><div><h2>Verification Queue</h2><small>{verification.filter(x=>x.status==='Pending').length} pending document / eKYC submissions</small></div><div style={{display:'flex',gap:8,flexWrap:'wrap'}}><input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search user or document" style={{minHeight:40,border:'1px solid #dfe8e7',borderRadius:10,padding:'0 10px'}}/><select value={filter} onChange={e=>setFilter(e.target.value)}><option>Pending</option><option>Verified</option><option>Rejected</option><option>All</option></select></div></div><div className="controlGrid">{rows.length?rows.map(x=>{const u=userMap[String(x.user_id)]||{};return <article className="controlCard" key={x.id}><div><b>{u.name||u.username||x.user_id}</b><span>{x.role} · {x.doc_type}</span><small>{x.user_id}</small></div><div className="controlBadges"><em className={x.status==='Verified'?'ok':x.status==='Rejected'?'bad':'warn'}>{x.status}</em>{x.file_id&&<a href={`/api/file/${x.file_id}`} target="_blank" rel="noreferrer">View document</a>}</div>{x.note&&<p><b>Review note:</b> {x.note}</p>}{x.status==='Pending'&&<div className="controlActions"><button className="approve" onClick={()=>act({action:'verification-review',id:x.id,status:'Verified',note:''})}>Approve</button><button onClick={()=>{const note=prompt('Reason for rejection:','')||'';if(!note.trim())return;act({action:'verification-review',id:x.id,status:'Rejected',note})}}>Reject with reason</button></div>}</article>}):<div className="emptyCard">No verification submissions match this filter.</div>}</div></section>;
+}
 
 function UserControl({users,verification,act}){
  const [q,setQ]=useState(''),[role,setRole]=useState('All'),[status,setStatus]=useState('All'),[verify,setVerify]=useState('All');
