@@ -58,7 +58,7 @@ export default function AdminControlCenter({user}){
       {view==='bookings'&&<CompactList title="Bookings" cols={['Booking','Listing','Customer','Check-in','Check-out','Amount','Status']} rows={data?.bookings?.map(x=>[x.id,x.pgId,x.customerId,x.checkIn,x.checkOut,`₹${Number(x.amount||0).toLocaleString('en-IN')}`,x.status])}/>} 
       {view==='payments'&&<section className="moneyView"><CompactList title="Payments" cols={['Payment','Booking','Customer','Amount','Status']} rows={data?.payments?.map(x=>[x.id,x.bookingId,x.customerId,`₹${Number(x.amount||0).toLocaleString('en-IN')}`,x.status])}/><CompactList title="Refunds" cols={['Refund','Booking','Amount','Status']} rows={data?.refunds?.map(x=>[x.id,x.bookingId,`₹${Number(x.amount||0).toLocaleString('en-IN')}`,x.status])}/></section>}
       {view==='reviews'&&<CompactList title="Reviews" cols={['Review','Booking','Listing','Rating','Comment','Date']} rows={data?.reviews?.map(x=>[x.id,x.booking_id,x.pg_id,`${x.rating}/5`,x.comment,fmt(x.created_at)])}/>} 
-      {view==='activity'&&<CompactList title="Activity" cols={['Time','Admin','Action','Entity','Details']} rows={data?.audit?.map(x=>[fmt(x.created_at),x.admin_id,x.action,`${x.entity_type} ${x.entity_id}`,x.details])}/>} 
+      {view==='activity'&&<CompactList title="Activity" cols={['Time','Actor','Action','Entity','Details']} rows={data?.audit?.map(x=>[fmt(x.created_at),x.admin_id,x.action,`${x.entity_type} ${x.entity_id}`,x.details])}/>} 
     </div>}
   </main>
   <nav className="mobileDock">
